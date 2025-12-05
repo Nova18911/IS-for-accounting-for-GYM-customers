@@ -126,11 +126,34 @@ class LoginWindow(QMainWindow):
                 f"Произошла ошибка:\n{str(e)}"
             )
 
+        if result and len(result) > 0:
+            user_id, user_email, role = result[0]
+            print(f"✅ Успешная авторизация!")
+
+            QMessageBox.information(
+                self, "✅ Успех",
+                f"Авторизация успешна!\n\n"
+                f"Добро пожаловать, {user_email}!"
+            )
+
+            # Очищаем поля
+            self.ui.Email.clear()
+            self.ui.password.clear()
+
+            # Закрываем окно авторизации
+            print("👋 Закрываем окно авторизации...")
+            self.close()
+
+            # Открываем главное окно
+            self.open_main_window(user_id, user_email, role)
+
     def closeEvent(self, event):
         """Обработка закрытия окна"""
         print("👋 Окно закрывается...")
         print("=" * 40)
         event.accept()
+
+
 
 
 # Для тестирования
