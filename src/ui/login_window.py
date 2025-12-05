@@ -25,26 +25,25 @@ class Ui_LoginWindow(object):
         self.Autorization.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.Autorization.setWordWrap(False)
         self.Autorization.setObjectName("Autorization")
-        self.Email = QtWidgets.QTextBrowser(parent=self.centralwidget)
-        self.Email.setGeometry(QtCore.QRect(160, 150, 471, 41))
-        font = QtGui.QFont()
-        font.setPointSize(12)
-        self.Email.setFont(font)
-        self.Email.setReadOnly(False)
-        self.Email.setObjectName("Email")
-        self.password = QtWidgets.QTextBrowser(parent=self.centralwidget)
-        self.password.setGeometry(QtCore.QRect(160, 230, 471, 41))
-        font = QtGui.QFont()
-        font.setPointSize(12)
-        self.password.setFont(font)
-        self.password.setReadOnly(False)
-        self.password.setObjectName("password")
         self.Input = QtWidgets.QPushButton(parent=self.centralwidget)
         self.Input.setGeometry(QtCore.QRect(290, 310, 201, 41))
         font = QtGui.QFont()
         font.setPointSize(12)
         self.Input.setFont(font)
         self.Input.setObjectName("Input")
+        self.Email = QtWidgets.QLineEdit(parent=self.centralwidget)
+        self.Email.setGeometry(QtCore.QRect(160, 140, 471, 41))
+        font = QtGui.QFont()
+        font.setPointSize(12)
+        self.Email.setFont(font)
+        self.Email.setInputMask("")
+        self.Email.setObjectName("Email")
+        self.password = QtWidgets.QLineEdit(parent=self.centralwidget)
+        self.password.setGeometry(QtCore.QRect(160, 230, 471, 41))
+        font = QtGui.QFont()
+        font.setPointSize(12)
+        self.password.setFont(font)
+        self.password.setObjectName("password")
         LoginWindow.setCentralWidget(self.centralwidget)
         self.menubar = QtWidgets.QMenuBar(parent=LoginWindow)
         self.menubar.setGeometry(QtCore.QRect(0, 0, 800, 26))
@@ -61,16 +60,6 @@ class Ui_LoginWindow(object):
         _translate = QtCore.QCoreApplication.translate
         LoginWindow.setWindowTitle(_translate("LoginWindow", "MainWindow"))
         self.Autorization.setText(_translate("LoginWindow", "Авторизация в системе"))
-        self.Email.setHtml(_translate("LoginWindow", "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0//EN\" \"http://www.w3.org/TR/REC-html40/strict.dtd\">\n"
-"<html><head><meta name=\"qrichtext\" content=\"1\" /><style type=\"text/css\">\n"
-"p, li { white-space: pre-wrap; }\n"
-"</style></head><body style=\" font-family:\'MS Shell Dlg 2\'; font-size:12pt; font-weight:400; font-style:normal;\">\n"
-"<p style=\"-qt-paragraph-type:empty; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\"><br /></p></body></html>"))
-        self.Email.setPlaceholderText(_translate("LoginWindow", "email"))
-        self.password.setHtml(_translate("LoginWindow", "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0//EN\" \"http://www.w3.org/TR/REC-html40/strict.dtd\">\n"
-"<html><head><meta name=\"qrichtext\" content=\"1\" /><style type=\"text/css\">\n"
-"p, li { white-space: pre-wrap; }\n"
-"</style></head><body style=\" font-family:\'MS Shell Dlg 2\'; font-size:12pt; font-weight:400; font-style:normal;\">\n"
-"<p style=\"-qt-paragraph-type:empty; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px; font-size:7.8pt;\"><br /></p></body></html>"))
-        self.password.setPlaceholderText(_translate("LoginWindow", "пароль"))
         self.Input.setText(_translate("LoginWindow", "Вход"))
+        self.Email.setPlaceholderText(_translate("LoginWindow", "email"))
+        self.password.setPlaceholderText(_translate("LoginWindow", "пароль"))

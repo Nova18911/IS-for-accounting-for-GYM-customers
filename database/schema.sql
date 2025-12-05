@@ -27,7 +27,8 @@ CREATE TABLE halls (
 -- Таблица типов тренеров
 CREATE TABLE trainer_types (
     trainer_type_id INT PRIMARY KEY AUTO_INCREMENT,
-    trainer_type_name VARCHAR(50) NOT NULL UNIQUE
+    trainer_type_name VARCHAR(50) NOT NULL UNIQUE,
+    rate INT
 );
 
 -- Таблица тренеров
@@ -38,7 +39,6 @@ CREATE TABLE trainers (
     middle_name VARCHAR(50),
     photo LONGBLOB,
     phone VARCHAR(20),
-    rate INT,
     trainer_type_id INT NOT NULL,
     FOREIGN KEY (trainer_type_id) REFERENCES trainer_types(trainer_type_id)
 );
