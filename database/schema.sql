@@ -1,103 +1,117 @@
 USE 2025_mysql_art;
 
--- 1. Сначала создаем таблицы без внешних ключей
--- Таблица стоимости абонементов (самая независимая)
-CREATE TABLE IF NOT EXISTS subscription_prices (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    duration VARCHAR(50) NOT NULL, -- '1 месяц', '3 месяца'
-    price DECIMAL(10,2) NOT NULL
-);
+-- Временно отключаем проверку внешних ключей
+SET FOREIGN_KEY_CHECKS = 0;
 
--- Таблица абонементов
-CREATE TABLE IF NOT EXISTS subscriptions (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    start_date DATE NOT NULL,
-    subscription_price_id INT NOT NULL,
-    status ENUM('active', 'expired', 'cancelled') DEFAULT 'active',
-    end_date DATE,
-    FOREIGN KEY (subscription_price_id) REFERENCES subscription_prices(id)
-);
+-- Удаляем таблицы если они уже существуют (в обратном порядке зависимостей)
+DROP TABLE IF EXISTS group_attendances;
+DROP TABLE IF EXISTS personal_trainings;
+DROP TABLE IF EXISTS group_trainings;
+DROP TABLE IF EXISTS services;
+DROP TABLE IF EXISTS halls;
+DROP TABLE IF EXISTS clients;
+DROP TABLE IF EXISTS subscriptions;
+DROP TABLE IF EXISTS subscription_prices;
+DROP TABLE IF EXISTS trainers;
+DROP TABLE IF EXISTS trainer_types;
 
--- Таблица типов тренеров
-CREATE TABLE IF NOT EXISTS trainer_types (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    type_name VARCHAR(50) NOT NULL UNIQUE -- 'персональный', 'групповой', 'общий'
-);
-
--- Таблица тренеров
-CREATE TABLE IF NOT EXISTS trainers (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    last_name VARCHAR(50) NOT NULL,
-    first_name VARCHAR(50) NOT NULL,
-    middle_name VARCHAR(50),
-    phone VARCHAR(20),
-    photo LONGBLOB,
-    rate DECIMAL(10,2),
-    trainer_type_id INT NOT NULL,
-    FOREIGN KEY (trainer_type_id) REFERENCES trainer_types(id)
-);
+-- 1. Создаем таблицы в правильном порядке (от независимых к зависимым)
 
 -- Таблица залов
-CREATE TABLE IF NOT EXISTS halls (
-    id INT PRIMARY KEY AUTO_INCREMENT,
+CREATE TABLE halls (
+    hall_id INT PRIMARY KEY AUTO_INCREMENT,
+    hall_name VARCHAR(30) NOT NULL UNIQUE,
     capacity INT NOT NULL
 );
 
--- Таблица услуг
-CREATE TABLE IF NOT EXISTS services (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    service_name VARCHAR(100) NOT NULL,
-    price DECIMAL(10,2),
-    hall_id INT NOT NULL,
-    FOREIGN KEY (hall_id) REFERENCES halls(id)
+-- Таблица типов тренеров
+CREATE TABLE trainer_types (
+    trainer_type_id INT PRIMARY KEY AUTO_INCREMENT,
+    trainer_type_name VARCHAR(50) NOT NULL UNIQUE
 );
 
--- Таблица клиентов (НО БЕЗ FOREIGN KEY пока)
-CREATE TABLE IF NOT EXISTS clients (
-    id INT PRIMARY KEY AUTO_INCREMENT,
+-- Таблица тренеров
+CREATE TABLE trainers (
+    trainer_id INT PRIMARY KEY AUTO_INCREMENT,
+    last_name VARCHAR(50) NOT NULL,
+    first_name VARCHAR(50) NOT NULL,
+    middle_name VARCHAR(50),
+    photo LONGBLOB,
+    phone VARCHAR(20),
+    rate INT,
+    trainer_type_id INT NOT NULL,
+    FOREIGN KEY (trainer_type_id) REFERENCES trainer_types(trainer_type_id)
+);
+
+-- Таблица стоимости абонементов
+CREATE TABLE subscription_prices (
+    subscription_price_id INT PRIMARY KEY AUTO_INCREMENT,
+    duration VARCHAR(50) NOT NULL UNIQUE,
+    price VARCHAR(45) NOT NULL
+);
+
+-- Таблица абонементов
+CREATE TABLE subscriptions (
+    subscription_id INT PRIMARY KEY AUTO_INCREMENT,
+    start_date DATE NOT NULL,
+    subscription_price_id INT NOT NULL,
+    FOREIGN KEY (subscription_price_id) REFERENCES subscription_prices(subscription_price_id)
+);
+
+-- Таблица клиентов
+CREATE TABLE clients (
+    client_id INT PRIMARY KEY AUTO_INCREMENT,
     last_name VARCHAR(50) NOT NULL,
     first_name VARCHAR(50) NOT NULL,
     middle_name VARCHAR(50),
     phone VARCHAR(20),
     email VARCHAR(100),
     photo LONGBLOB,
-    subscription_id INT UNIQUE
-    -- FOREIGN KEY добавим позже
+    subscription_id INT UNIQUE,
+    FOREIGN KEY (subscription_id) REFERENCES subscriptions(subscription_id)
 );
 
--- 2. Теперь добавляем все FOREIGN KEYS
-ALTER TABLE clients
-ADD FOREIGN KEY (subscription_id) REFERENCES subscriptions(id);
+-- Таблица услуг
+CREATE TABLE services (
+    service_id INT PRIMARY KEY AUTO_INCREMENT,
+    service_name VARCHAR(100) NOT NULL UNIQUE,
+    price INT,
+    hall_id INT NOT NULL,
+    FOREIGN KEY (hall_id) REFERENCES halls(hall_id)
+);
 
 -- Таблица групповых тренировок
-CREATE TABLE IF NOT EXISTS group_trainings (
-    id INT PRIMARY KEY AUTO_INCREMENT,
+CREATE TABLE group_trainings (
+    group_training_id INT PRIMARY KEY AUTO_INCREMENT,
     training_date DATE NOT NULL,
     start_time TIME NOT NULL,
     trainer_id INT NOT NULL,
     service_id INT NOT NULL,
-    FOREIGN KEY (trainer_id) REFERENCES trainers(id),
-    FOREIGN KEY (service_id) REFERENCES services(id)
+    FOREIGN KEY (trainer_id) REFERENCES trainers(trainer_id),
+    FOREIGN KEY (service_id) REFERENCES services(service_id)
 );
 
 -- Таблица персональных тренировок
-CREATE TABLE IF NOT EXISTS personal_trainings (
-    id INT PRIMARY KEY AUTO_INCREMENT,
+CREATE TABLE personal_trainings (
+    personal_training_id INT PRIMARY KEY AUTO_INCREMENT,
     training_date DATE NOT NULL,
     start_time TIME NOT NULL,
-    price DECIMAL(10,2),
+    price INT,
     trainer_id INT NOT NULL,
     client_id INT NOT NULL,
-    FOREIGN KEY (trainer_id) REFERENCES trainers(id),
-    FOREIGN KEY (client_id) REFERENCES clients(id)
+    FOREIGN KEY (trainer_id) REFERENCES trainers(trainer_id),
+    FOREIGN KEY (client_id) REFERENCES clients(client_id)
 );
 
 -- Таблица посещений групповых тренировок
-CREATE TABLE IF NOT EXISTS group_attendances (
-    id INT PRIMARY KEY AUTO_INCREMENT,
+CREATE TABLE group_attendances (
+    attendance_id INT PRIMARY KEY AUTO_INCREMENT,
     group_training_id INT NOT NULL,
     client_id INT NOT NULL,
     attendance_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (group_training_id) REFERENCES group_trainings(id),
-    FOREIGN KEY (client_id) REFERENCES clients(id)
+    FOREIGN KEY (group_training_id) REFERENCES group_trainings(group_training_id),
+    FOREIGN KEY (client_id) REFERENCES clients(client_id)
 );
+
+-- Включаем проверку внешних ключей обратно
+SET FOREIGN_KEY_CHECKS = 1;

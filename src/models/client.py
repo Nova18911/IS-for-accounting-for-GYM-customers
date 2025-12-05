@@ -1,34 +1,19 @@
-from src.database.connector import db
+class Client:
 
+    def __init__(self, client_id=None, last_name="", first_name="", middle_name="",
+                 phone="", email="", photo=None, subscription_id=None):
+        self.client_id = client_id  # client_id (код_клиента)
+        self.last_name = last_name  # last_name (Фамилия)
+        self.first_name = first_name  # first_name (Имя)
+        self.middle_name = middle_name  # middle_name (Отчество)
+        self.phone = phone  # phone (телефон)
+        self.email = email  # email (Email)
+        self.photo = photo  # photo (Фото) - бинарные данные
+        self.subscription_id = subscription_id  # subscription_id (Код_абонемента)
 
-class SimpleClient:
-    """Упрощенная модель клиента с прямыми запросами к БД"""
+    def __str__(self):
+        return f"{self.last_name} {self.first_name} {self.phone}"
 
-    @staticmethod
-    def get_all():
-        """Получить всех клиентов"""
-        query = "SELECT * FROM clients WHERE is_active = TRUE ORDER BY last_name"
-        return db.execute_query(query)
-
-    @staticmethod
-    def create(data):
-        """Создать нового клиента"""
-        query = """
-        INSERT INTO clients (last_name, first_name, phone, email)
-        VALUES (%s, %s, %s, %s)
-        """
-        values = (data['last_name'], data['first_name'],
-                  data['phone'], data['email'])
-        return db.execute_query(query, values)
-
-    @staticmethod
-    def update(client_id, data):
-        """Обновить клиента"""
-        query = """
-        UPDATE clients 
-        SET last_name = %s, first_name = %s, phone = %s, email = %s
-        WHERE id = %s
-        """
-        values = (data['last_name'], data['first_name'],
-                  data['phone'], data['email'], client_id)
-        return db.execute_query(query, values)
+    def has_photo(self):
+        #Проверяет, есть ли фото у клиента
+        return self.photo is not None and len(self.photo) > 0
