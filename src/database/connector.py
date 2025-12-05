@@ -5,9 +5,8 @@ class DatabaseConnector:
     def __init__(self):
         self.connection = None
 
-    def connect(self, host='localhost', user='your_username',
-                password='your_password', database='fitness_club'):
-        """Подключение к базе данных"""
+    def connect(self, host='5.183.188.132', user='2025_mysql__usr8',
+                password='91LeBUlsnevGA7cz', database='2025_mysql_art'):
         try:
             self.connection = pymysql.connect(
                 host=host,
@@ -24,7 +23,6 @@ class DatabaseConnector:
             return False
 
     def execute_sql_file(self, file_path):
-        """Выполнение SQL-файла"""
         if not self.connection:
             print("Нет подключения к БД")
             return False
@@ -51,7 +49,6 @@ class DatabaseConnector:
             return False
 
     def execute_query(self, query, params=None):
-        """Выполнение одного SQL-запроса"""
         try:
             with self.connection.cursor() as cursor:
                 cursor.execute(query, params)

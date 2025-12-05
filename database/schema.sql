@@ -1,20 +1,15 @@
-CREATE DATABASE fitness_club;
+USE 2025_mysql_art;
 
--- Таблица клиентов
-CREATE TABLE clients (
+-- 1. Сначала создаем таблицы без внешних ключей
+-- Таблица стоимости абонементов (самая независимая)
+CREATE TABLE IF NOT EXISTS subscription_prices (
     id INT PRIMARY KEY AUTO_INCREMENT,
-    last_name VARCHAR(50) NOT NULL,
-    first_name VARCHAR(50) NOT NULL,
-    middle_name VARCHAR(50),
-    phone VARCHAR(20),
-    email VARCHAR(100),
-    photo LONGBLOB,
-    subscription_id INT UNIQUE, -- Обеспечивает только один активный абонемент
-    FOREIGN KEY (subscription_id) REFERENCES subscriptions(id)
+    duration VARCHAR(50) NOT NULL, -- '1 месяц', '3 месяца'
+    price DECIMAL(10,2) NOT NULL
 );
 
 -- Таблица абонементов
-CREATE TABLE subscriptions (
+CREATE TABLE IF NOT EXISTS subscriptions (
     id INT PRIMARY KEY AUTO_INCREMENT,
     start_date DATE NOT NULL,
     subscription_price_id INT NOT NULL,
@@ -23,17 +18,14 @@ CREATE TABLE subscriptions (
     FOREIGN KEY (subscription_price_id) REFERENCES subscription_prices(id)
 );
 
--- Добавляем внешний ключ после создания subscriptions
-ALTER TABLE clients ADD FOREIGN KEY (subscription_id) REFERENCES subscriptions(id);
-
 -- Таблица типов тренеров
-CREATE TABLE trainer_types (
+CREATE TABLE IF NOT EXISTS trainer_types (
     id INT PRIMARY KEY AUTO_INCREMENT,
     type_name VARCHAR(50) NOT NULL UNIQUE -- 'персональный', 'групповой', 'общий'
 );
 
 -- Таблица тренеров
-CREATE TABLE trainers (
+CREATE TABLE IF NOT EXISTS trainers (
     id INT PRIMARY KEY AUTO_INCREMENT,
     last_name VARCHAR(50) NOT NULL,
     first_name VARCHAR(50) NOT NULL,
@@ -46,13 +38,13 @@ CREATE TABLE trainers (
 );
 
 -- Таблица залов
-CREATE TABLE halls (
+CREATE TABLE IF NOT EXISTS halls (
     id INT PRIMARY KEY AUTO_INCREMENT,
     capacity INT NOT NULL
 );
 
 -- Таблица услуг
-CREATE TABLE services (
+CREATE TABLE IF NOT EXISTS services (
     id INT PRIMARY KEY AUTO_INCREMENT,
     service_name VARCHAR(100) NOT NULL,
     price DECIMAL(10,2),
@@ -60,16 +52,25 @@ CREATE TABLE services (
     FOREIGN KEY (hall_id) REFERENCES halls(id)
 );
 
--- Таблица стоимости абонементов
-CREATE TABLE subscription_prices (
+-- Таблица клиентов (НО БЕЗ FOREIGN KEY пока)
+CREATE TABLE IF NOT EXISTS clients (
     id INT PRIMARY KEY AUTO_INCREMENT,
-    duration VARCHAR(50) NOT NULL, -- '1 месяц', '3 месяца'
-    price DECIMAL(10,2) NOT NULL
+    last_name VARCHAR(50) NOT NULL,
+    first_name VARCHAR(50) NOT NULL,
+    middle_name VARCHAR(50),
+    phone VARCHAR(20),
+    email VARCHAR(100),
+    photo LONGBLOB,
+    subscription_id INT UNIQUE
+    -- FOREIGN KEY добавим позже
 );
 
+-- 2. Теперь добавляем все FOREIGN KEYS
+ALTER TABLE clients
+ADD FOREIGN KEY (subscription_id) REFERENCES subscriptions(id);
 
 -- Таблица групповых тренировок
-CREATE TABLE group_trainings (
+CREATE TABLE IF NOT EXISTS group_trainings (
     id INT PRIMARY KEY AUTO_INCREMENT,
     training_date DATE NOT NULL,
     start_time TIME NOT NULL,
@@ -80,7 +81,7 @@ CREATE TABLE group_trainings (
 );
 
 -- Таблица персональных тренировок
-CREATE TABLE personal_trainings (
+CREATE TABLE IF NOT EXISTS personal_trainings (
     id INT PRIMARY KEY AUTO_INCREMENT,
     training_date DATE NOT NULL,
     start_time TIME NOT NULL,
@@ -92,7 +93,7 @@ CREATE TABLE personal_trainings (
 );
 
 -- Таблица посещений групповых тренировок
-CREATE TABLE group_attendances (
+CREATE TABLE IF NOT EXISTS group_attendances (
     id INT PRIMARY KEY AUTO_INCREMENT,
     group_training_id INT NOT NULL,
     client_id INT NOT NULL,
