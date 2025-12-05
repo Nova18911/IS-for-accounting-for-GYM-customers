@@ -9,3 +9,4 @@ class GroupAttendance:
 
     def __str__(self):
         return f"Посещение {self.attendance_date}"
+    
