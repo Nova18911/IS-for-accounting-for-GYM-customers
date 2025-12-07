@@ -14,6 +14,7 @@ DROP TABLE IF EXISTS subscriptions;
 DROP TABLE IF EXISTS subscription_prices;
 DROP TABLE IF EXISTS trainers;
 DROP TABLE IF EXISTS trainer_types;
+DROP TABLE IF EXISTS users;
 
 -- 1. Создаем таблицы в правильном порядке (от независимых к зависимым)
 
@@ -21,7 +22,7 @@ DROP TABLE IF EXISTS trainer_types;
 CREATE TABLE halls (
     hall_id INT PRIMARY KEY AUTO_INCREMENT,
     hall_name VARCHAR(30) NOT NULL UNIQUE,
-    capacity INT NOT NULL
+    capacity INT
 );
 
 -- Таблица типов тренеров
@@ -115,3 +116,29 @@ CREATE TABLE group_attendances (
 
 -- Включаем проверку внешних ключей обратно
 SET FOREIGN_KEY_CHECKS = 1;
+
+CREATE TABLE users (
+    user_id INT PRIMARY KEY AUTO_INCREMENT,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    role ENUM('admin', 'reception', 'trainer') DEFAULT 'reception',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    is_active BOOLEAN DEFAULT TRUE
+);
+
+INSERT INTO users (email, password_hash, role) VALUES
+('admin@fitness.ru', SHA2('admin123', 256), 'admin'),
+('reception@fitness.ru', SHA2('reception123', 256), 'reception');
+
+-- Заполнение таблицы типов тренеров
+INSERT INTO trainer_types (trainer_type_name, rate) VALUES
+('Общий тренер', 2000),      -- Оклад 2000 за тренировку
+('Групповой тренер', 1500),  -- Оклад 1500 за групповую тренировку
+('Персональный тренер', 3000); -- Оклад 3000 за персональную тренировку
+
+-- Заполнение таблицы стоимости абонементов
+INSERT INTO subscription_prices (duration, price) VALUES
+('1 месяц', 3000),    -- 3000 руб за месяц
+('3 месяца', 8000),   -- 8000 руб за 3 месяца (скидка)
+('полгода', 15000),   -- 15000 руб за полгода (скидка)
+('год', 28000);       -- 28000 руб за год (скидка)
