@@ -403,6 +403,9 @@
       <pointsize>10</pointsize>
      </font>
     </property>
+    <property name="readOnly">
+     <bool>true</bool>
+    </property>
    </widget>
    <widget class="QLabel" name="label_2">
     <property name="geometry">
@@ -498,6 +501,9 @@
       <pointsize>10</pointsize>
      </font>
     </property>
+    <property name="readOnly">
+     <bool>true</bool>
+    </property>
    </widget>
    <widget class="QComboBox" name="TrainercomboBox">
     <property name="geometry">
@@ -541,6 +547,9 @@
       <pointsize>10</pointsize>
      </font>
     </property>
+    <property name="readOnly">
+     <bool>true</bool>
+    </property>
    </widget>
    <widget class="QLabel" name="HallE">
     <property name="geometry">
@@ -573,6 +582,9 @@
      <font>
       <pointsize>10</pointsize>
      </font>
+    </property>
+    <property name="readOnly">
+     <bool>true</bool>
     </property>
    </widget>
    <widget class="QPushButton" name="DeleteGroupTrainingBtn">

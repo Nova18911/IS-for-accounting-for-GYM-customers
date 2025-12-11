@@ -1,657 +1,586 @@
-# views/trainer_window.py
-import sys
+# src/views/trainer_window.py
 import os
-from pathlib import Path
-from PyQt6.QtWidgets import QMainWindow, QTableWidgetItem, QMessageBox, QApplication, QFileDialog
-from PyQt6.QtCore import Qt, QByteArray
-from PyQt6.QtGui import QPixmap, QImage
+import logging
 
+from PyQt6.QtWidgets import (
+    QMainWindow, QTableWidgetItem, QMessageBox, QFileDialog, QHeaderView
+)
+from PyQt6.QtCore import Qt, QByteArray, QBuffer
+from PyQt6.QtGui import QPixmap, QImage, QPainter, QPainterPath
+
+# Импорт UI остаётся на уровне модуля — это нормально
 from src.ui.trainer_window import Ui_TrainerForm
-from src.models.trainers import Trainer
-from src.models.trainer_types import TrainerType
-from src.views.hall_window import HallWindow
+
+# Константы
+MAX_PHOTO_BYTES = 5 * 1024 * 1024  # 5 MB
+SAVE_PHOTO_SIZE = 256               # уменьшать перед сохранением до 256x256
+THUMBNAIL_SIZE = 150                # показывать миниатюру 150x150
+
+# Настройка логгера для этого модуля (пишет в основной лог приложения, если настроен)
+logger = logging.getLogger("trainer_window")
+if not logger.handlers:
+    # если логгер ещё не настроен, добавим минимальный обработчик (не перезаписывает основной)
+    h = logging.StreamHandler()
+    h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    logger.addHandler(h)
+    logger.setLevel(logging.INFO)
+
+
+def qimage_to_bytes(qimage: QImage, fmt: str = "PNG") -> bytes:
+    """Сохранить QImage в байты через QBuffer."""
+    try:
+        buf = QBuffer()
+        buf.open(QBuffer.OpenModeFlag.WriteOnly)
+        ok = qimage.save(buf, fmt)
+        if not ok:
+            logger.warning("qimage_to_bytes: qimage.save returned False")
+        data = bytes(buf.data())
+        buf.close()
+        return data
+    except Exception as e:
+        logger.exception("qimage_to_bytes failed: %s", e)
+        return b""
+
+
+def make_circular_pixmap(pix: QPixmap, size: int) -> QPixmap:
+    """Возвращает QPixmap размером size x size, обрезанный в круг и с рамкой.
+       Весь код обёрнут в try/except, при проблеме возвращаем пустой pixmap."""
+    try:
+        if pix.isNull():
+            out = QPixmap(size, size)
+            out.fill(Qt.GlobalColor.transparent)
+            return out
+
+        scaled = pix.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                             Qt.TransformationMode.SmoothTransformation)
+
+        out = QPixmap(size, size)
+        out.fill(Qt.GlobalColor.transparent)
+
+        painter = QPainter(out)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        path = QPainterPath()
+        path.addEllipse(0, 0, size, size)
+        painter.setClipPath(path)
+        painter.drawPixmap(0, 0, scaled)
+
+        # рамка
+        pen = painter.pen()
+        pen.setWidth(1)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawEllipse(0, 0, size - 1, size - 1)
+
+        painter.end()
+        return out
+    except Exception as e:
+        logger.exception("make_circular_pixmap failed: %s", e)
+        fallback = QPixmap(size, size)
+        fallback.fill(Qt.GlobalColor.transparent)
+        return fallback
 
 
 class TrainerWindow(QMainWindow):
-    """Окно управления тренерами"""
+    """Стабильный вариант окна тренеров с защитами."""
 
     def __init__(self, user_id=None, user_email=None, user_role=None):
         super().__init__()
-        self.ui = Ui_TrainerForm()
-        self.ui.setupUi(self)
 
-        # Данные пользователя
+        try:
+            self.ui = Ui_TrainerForm()
+            self.ui.setupUi(self)
+        except Exception:
+            logger.exception("Failed to setup UI in TrainerWindow __init__")
+            raise
+
+        # user data
         self.user_id = user_id
         self.user_email = user_email
         self.user_role = user_role
 
-        # Текущий редактируемый тренер
+        # state
         self.current_trainer = None
+        self.current_photo_data = None  # bytes
 
-        # Путь к фото тренера (храним временно)
-        self.current_photo_path = None
-        # Бинарные данные фото (для сохранения в БД)
-        self.current_photo_data = None
+        # init UI bits
+        try:
+            self.setup_interface()
+        except Exception:
+            logger.exception("setup_interface crashed")
+            # не поднимаем дальше — но можно продолжить
+        # грузим типы/список — обёрнуто в try, чтобы локализовать падение
+        try:
+            self.load_trainer_types()
+        except Exception:
+            logger.exception("load_trainer_types crashed (continuing)")
 
-        # Устанавливаем заголовок окна
+        try:
+            self.load_trainers()
+        except Exception:
+            logger.exception("load_trainers crashed (continuing)")
+
+        try:
+            self.connect_buttons()
+        except Exception:
+            logger.exception("connect_buttons crashed (continuing)")
+
+        try:
+            self.hide_edit_panel()
+            self.reset_form()
+            self.ui.TrainerButton.setEnabled(False)
+        except Exception:
+            logger.exception("post-init UI adjustments failed")
+
         self.setWindowTitle("Фитнес-Менеджер - Тренеры")
 
-        # Настраиваем интерфейс
-        self.setup_interface()
-
-        # Загружаем данные
-        self.load_trainer_types()  # Загружаем типы тренеров в ComboBox
-        self.load_trainers()  # Загружаем тренеров в таблицу
-
-        # Подключаем кнопки
-        self.connect_buttons()
-
-        # Скрываем правую панель при запуске
-        self.hide_edit_panel()
-
-        # Сбрасываем форму добавления/редактирования
-        self.reset_form()
-
-        # Делаем кнопку "Тренеры" неактивной
-        self.ui.TrainerButton.setEnabled(False)
-
+    # -----------------------
+    # Интерфейс / таблица
+    # -----------------------
     def setup_interface(self):
-        """Настройка интерфейса"""
-        # Настраиваем таблицу
-        self.ui.TrainerTableWidget.setColumnWidth(0, 120)  # Фамилия
-        self.ui.TrainerTableWidget.setColumnWidth(1, 100)  # Имя
-        self.ui.TrainerTableWidget.setColumnWidth(2, 120)  # Отчество
-        self.ui.TrainerTableWidget.setColumnWidth(3, 150)  # Телефон
+        header = self.ui.TrainerTableWidget.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
 
-        # Разрешаем выделение строк
+        # Таблица — только чтение по умолчанию
+        self.ui.TrainerTableWidget.setEditTriggers(
+            self.ui.TrainerTableWidget.EditTrigger.NoEditTriggers
+        )
         self.ui.TrainerTableWidget.setSelectionBehavior(
             self.ui.TrainerTableWidget.SelectionBehavior.SelectRows
         )
 
-        # Отключаем редактирование ячеек
-        self.ui.TrainerTableWidget.setEditTriggers(
-            self.ui.TrainerTableWidget.EditTrigger.NoEditTriggers
-        )
-
-        # Подключаем двойной клик по таблице
+        # События
         self.ui.TrainerTableWidget.doubleClicked.connect(self.on_table_double_click)
-
-        # Подключаем одиночный клик по таблице
         self.ui.TrainerTableWidget.itemClicked.connect(self.on_table_item_clicked)
-
-        # Подключаем поиск
         self.ui.SearchLastNameEdit.textChanged.connect(self.on_search_last_name_changed)
         self.ui.SearchPhoneEdit.textChanged.connect(self.on_search_phone_changed)
 
-        # Делаем label для фото кликабельным
-        self.ui.PhotoTrainerE.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.ui.PhotoTrainerE.mousePressEvent = self.on_photo_label_clicked
-
-        # Устанавливаем рамку для фото
-        self.ui.PhotoTrainerE.setStyleSheet("""
-            QLabel {
-                border: 2px dashed #ccc;
-                border-radius: 5px;
-                padding: 5px;
-            }
-            QLabel:hover {
-                border-color: #0078d4;
-                background-color: #f0f8ff;
-            }
-        """)
-
-    def on_photo_label_clicked(self, event):
-        """Обработчик клика на label с фото"""
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.load_photo()
-
-    def load_photo(self):
-        """Загрузка фото для тренера"""
+        # Clickable label may be provided by UI; safe-connect
         try:
-            # Открываем диалог выбора файла
-            file_path, _ = QFileDialog.getOpenFileName(
-                self,
-                "Выберите фото тренера",
-                "",
-                "Images (*.png *.jpg *.jpeg *.bmp *.gif);;All Files (*)"
-            )
+            self.ui.PhotoTrainerE.clicked.connect(self.on_photo_clicked)
+        except Exception:
+            # fallback
+            try:
+                self.ui.PhotoTrainerE.mousePressEvent = lambda ev: self.on_photo_clicked()
+            except Exception:
+                logger.warning("Photo label has neither .clicked nor mousePressEvent assignable")
 
-            if file_path:
-                # Проверяем размер файла (максимум 5 MB)
-                file_size = os.path.getsize(file_path)
-                if file_size > 5 * 1024 * 1024:  # 5 MB
-                    QMessageBox.warning(
-                        self,
-                        "Ошибка",
-                        "Размер файла слишком большой. Максимальный размер - 5 MB."
-                    )
-                    return
-
-                # Загружаем фото
-                pixmap = QPixmap(file_path)
-
-                # Масштабируем фото для отображения (максимум 150x150)
-                if not pixmap.isNull():
-                    # Сохраняем путь к файлу
-                    self.current_photo_path = file_path
-
-                    # Сохраняем бинарные данные для БД
-                    with open(file_path, 'rb') as file:
-                        self.current_photo_data = file.read()
-
-                    # Отображаем миниатюру
-                    scaled_pixmap = pixmap.scaled(
-                        150, 150,
-                        Qt.AspectRatioMode.KeepAspectRatio,
-                        Qt.TransformationMode.SmoothTransformation
-                    )
-                    self.ui.PhotoTrainerE.setPixmap(scaled_pixmap)
-
-                    # Меняем стиль, чтобы показать что фото загружено
-                    self.ui.PhotoTrainerE.setStyleSheet("""
-                        QLabel {
-                            border: 2px solid #4CAF50;
-                            border-radius: 5px;
-                            padding: 5px;
-                        }
-                    """)
-                else:
-                    QMessageBox.warning(self, "Ошибка", "Не удалось загрузить изображение")
-        except Exception as e:
-            QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить фото: {str(e)}")
-
-    def clear_photo(self):
-        """Очистка фото тренера"""
-        self.ui.PhotoTrainerE.clear()
-        self.ui.PhotoTrainerE.setText("Фото")
-        self.current_photo_path = None
-        self.current_photo_data = None
-
-        # Возвращаем стиль по умолчанию
-        self.ui.PhotoTrainerE.setStyleSheet("""
-            QLabel {
-                border: 2px dashed #ccc;
-                border-radius: 5px;
-                padding: 5px;
-            }
-            QLabel:hover {
-                border-color: #0078d4;
-                background-color: #f0f8ff;
-            }
-        """)
-
-    def show_edit_panel(self):
-        """Показать правую панель для добавления/редактирования"""
-        self.ui.widget_2.setVisible(True)
-
-    def hide_edit_panel(self):
-        """Скрыть правую панель для добавления/редактирования"""
-        self.ui.widget_2.setVisible(False)
-
-    def make_table_readonly(self):
-        """Делает таблицу полностью нередактируемой"""
-        for row in range(self.ui.TrainerTableWidget.rowCount()):
-            for col in range(self.ui.TrainerTableWidget.columnCount()):
-                item = self.ui.TrainerTableWidget.item(row, col)
-                if item:
-                    current_flags = item.flags()
-                    new_flags = current_flags & ~Qt.ItemFlag.ItemIsEditable
-                    item.setFlags(new_flags)
-
+    # -----------------------
+    # Загрузка / отображение данных
+    # -----------------------
     def load_trainer_types(self):
-        """Загрузка типов тренеров в ComboBox"""
+        """Загружает типы тренеров в ComboBox. Использует локальные импорты моделей (чтобы избежать циклов)."""
         try:
+            from src.models.trainer_types import trainer_type_get_all as _get_all
             self.ui.TrainerTypeComboBox.clear()
             self.ui.TrainerTypeComboBox.addItem("Выберите тип", None)
-
-            # Используем модель TrainerType для получения данных
-            trainer_types = TrainerType.get_all()
-
-            if trainer_types:
-                for trainer_type in trainer_types:
-                    self.ui.TrainerTypeComboBox.addItem(
-                        trainer_type.trainer_type_name,
-                        trainer_type.trainer_type_id
-                    )
-
+            types = _get_all()
+            for t in types:
+                # ожидаем dict {'trainer_type_id', 'trainer_type_name', 'rate'}
+                self.ui.TrainerTypeComboBox.addItem(t.get("trainer_type_name") or "Не указан", t.get("trainer_type_id"))
+            # событие изменения типа
+            self.ui.TrainerTypeComboBox.currentIndexChanged.connect(self.on_trainer_type_changed)
         except Exception as e:
-            print(f"Ошибка загрузки типов тренеров: {e}")
-            QMessageBox.warning(self, "Ошибка", f"Не удалось загрузить типы тренеров: {str(e)}")
+            logger.exception("load_trainer_types failed: %s", e)
 
     def load_trainers(self):
-        """Загрузка тренеров из БД в таблицу"""
+        """Load trainers using model functions (local import)."""
         try:
+            from src.models.trainers import trainer_get_all as _get_all
             self.ui.TrainerTableWidget.setRowCount(0)
+            rows = _get_all()
+            for rnum, row in enumerate(rows):
+                try:
+                    self.ui.TrainerTableWidget.insertRow(rnum)
+                    item_last = QTableWidgetItem(str(row.get("last_name", "")))
+                    item_last.setData(Qt.ItemDataRole.UserRole, row.get("trainer_id"))
+                    item_last.setFlags(item_last.flags() & ~Qt.ItemFlag.ItemIsEditable)
 
-            # Используем модель Trainer для получения данных
-            trainers = Trainer.get_all()
+                    item_first = QTableWidgetItem(str(row.get("first_name", "")))
+                    item_first.setFlags(item_first.flags() & ~Qt.ItemFlag.ItemIsEditable)
 
-            if trainers:
-                for row_num, trainer in enumerate(trainers):
-                    self.ui.TrainerTableWidget.insertRow(row_num)
+                    item_mid = QTableWidgetItem(str(row.get("middle_name", "")))
+                    item_mid.setFlags(item_mid.flags() & ~Qt.ItemFlag.ItemIsEditable)
 
-                    # Создаем ячейки ТОЛЬКО ДЛЯ ЧТЕНИЯ
-                    item_last_name = QTableWidgetItem(str(trainer.last_name))
-                    item_last_name.setFlags(item_last_name.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                    item_last_name.setData(Qt.ItemDataRole.UserRole, trainer.trainer_id)
-
-                    item_first_name = QTableWidgetItem(str(trainer.first_name))
-                    item_first_name.setFlags(item_first_name.flags() & ~Qt.ItemFlag.ItemIsEditable)
-
-                    item_middle_name = QTableWidgetItem(str(trainer.middle_name) if trainer.middle_name else "")
-                    item_middle_name.setFlags(item_middle_name.flags() & ~Qt.ItemFlag.ItemIsEditable)
-
-                    item_phone = QTableWidgetItem(str(trainer.phone) if trainer.phone else "")
+                    item_phone = QTableWidgetItem(str(row.get("phone", "")))
                     item_phone.setFlags(item_phone.flags() & ~Qt.ItemFlag.ItemIsEditable)
 
-                    # Устанавливаем ячейки
-                    self.ui.TrainerTableWidget.setItem(row_num, 0, item_last_name)
-                    self.ui.TrainerTableWidget.setItem(row_num, 1, item_first_name)
-                    self.ui.TrainerTableWidget.setItem(row_num, 2, item_middle_name)
-                    self.ui.TrainerTableWidget.setItem(row_num, 3, item_phone)
-
-            self.make_table_readonly()
-
+                    self.ui.TrainerTableWidget.setItem(rnum, 0, item_last)
+                    self.ui.TrainerTableWidget.setItem(rnum, 1, item_first)
+                    self.ui.TrainerTableWidget.setItem(rnum, 2, item_mid)
+                    self.ui.TrainerTableWidget.setItem(rnum, 3, item_phone)
+                except Exception:
+                    logger.exception("Failed to populate row %s in trainer table", rnum)
         except Exception as e:
-            print(f"Ошибка загрузки тренеров: {e}")
-            QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить тренеров: {str(e)}")
+            logger.exception("load_trainers failed: %s", e)
 
+    # -----------------------
+    # Навигация / кнопки
+    # -----------------------
     def connect_buttons(self):
-        """Подключение обработчиков кнопок"""
-        # Кнопка "Добавить"
         self.ui.Add_clientBtn.clicked.connect(self.add_trainer)
-
-        # Кнопка "Сохранить"
         self.ui.SaveTrainerBtn.clicked.connect(self.save_trainer)
-
-        # Кнопка "Удалить"
         self.ui.DeleteTrainerBtn.clicked.connect(self.delete_trainer)
-
-        # Кнопка "Выход"
         self.ui.ExitButton.clicked.connect(self.close)
 
-        # Кнопки навигации
+        # Навигация — локальные импорты при клике
         self.ui.ServiceButton.clicked.connect(self.open_services)
         self.ui.ScheduleButton.clicked.connect(self.open_schedule)
         self.ui.ClientsButton.clicked.connect(self.open_clients)
-        self.ui.TrainerButton.clicked.connect(self.on_trainers_clicked)
         self.ui.HallButton.clicked.connect(self.open_halls)
         self.ui.ReportButton.clicked.connect(self.open_reports)
 
-        # Подключаем изменение выбранного типа тренера
-        self.ui.TrainerTypeComboBox.currentIndexChanged.connect(self.on_trainer_type_changed)
+    # -----------------------
+    # Работа с фото
+    # -----------------------
+    def on_photo_clicked(self):
+        self.load_photo()
 
+    def load_photo(self):
+        """Загрузить файл, проверить размер, уменьшить, сохранить в current_photo_data и показать миниатюру"""
+        try:
+            path, _ = QFileDialog.getOpenFileName(
+                self, "Выберите фото тренера", "", "Images (*.png *.jpg *.jpeg *.bmp *.gif);;All Files (*)"
+            )
+            if not path:
+                return
+
+            size = os.path.getsize(path)
+            if size > MAX_PHOTO_BYTES:
+                QMessageBox.warning(self, "Ошибка", "Размер файла слишком большой. Максимум 5 MB.")
+                return
+
+            img = QImage(path)
+            if img.isNull():
+                QMessageBox.warning(self, "Ошибка", "Не удалось загрузить изображение.")
+                return
+
+            # Сохраняем уменьшённый для БД
+            saved = img.scaled(SAVE_PHOTO_SIZE, SAVE_PHOTO_SIZE,
+                               Qt.AspectRatioMode.KeepAspectRatio,
+                               Qt.TransformationMode.SmoothTransformation)
+            bts = qimage_to_bytes(saved, "PNG")
+            if not bts:
+                QMessageBox.warning(self, "Ошибка", "Не удалось подготовить изображение для сохранения.")
+                return
+            if len(bts) > MAX_PHOTO_BYTES:
+                # ещё сильнее уменьшаем
+                saved = img.scaled(128, 128, Qt.AspectRatioMode.KeepAspectRatio,
+                                   Qt.TransformationMode.SmoothTransformation)
+                bts = qimage_to_bytes(saved, "PNG")
+
+            self.current_photo_data = bts
+
+            # отображаем круглый thumbnail
+            pix = QPixmap()
+            pix.loadFromData(bts)
+            circ = make_circular_pixmap(pix, THUMBNAIL_SIZE)
+            self.ui.PhotoTrainerE.setPixmap(circ)
+        except Exception as e:
+            logger.exception("load_photo failed: %s", e)
+            QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить фото: {e}")
+
+    def clear_photo(self):
+        self.ui.PhotoTrainerE.clear()
+        self.ui.PhotoTrainerE.setText("Фото")
+        self.current_photo_data = None
+
+    # -----------------------
+    # CRUD / редактирование
+    # -----------------------
     def reset_form(self):
-        """Сброс формы добавления/редактирования"""
         self.current_trainer = None
-        self.ui.LastNameTrainerEdit.clear()
-        self.ui.FirstNameTrainerEdit.clear()
-        self.ui.MidleNameTrainerEdit.clear()
-        self.ui.PhoneTrainer.clear()
-        self.ui.EmailTrainerEdit.clear()
-        self.ui.TrainerTypeComboBox.setCurrentIndex(0)
-        self.ui.RateE.clear()
-        self.ui.IdTrainerE.clear()
-
-        # Очищаем фото
-        self.clear_photo()
-
-        self.ui.SaveTrainerBtn.setText("Сохранить")
-        self.ui.DeleteTrainerBtn.setEnabled(False)
-        self.ui.Add_clientBtn.setEnabled(True)
-
-    def on_trainer_type_changed(self, index):
-        """Обработчик изменения выбранного типа тренера"""
-        if index > 0:  # index 0 это "Выберите тип"
-            trainer_type_id = self.ui.TrainerTypeComboBox.currentData()
-            if trainer_type_id:
-                try:
-                    # Используем модель TrainerType для получения данных
-                    trainer_type = TrainerType.get_by_id(trainer_type_id)
-
-                    if trainer_type:
-                        self.ui.RateE.setText(f"{trainer_type.rate} руб.")
-                    else:
-                        self.ui.RateE.clear()
-
-                except Exception as e:
-                    print(f"Ошибка получения данных типа тренера: {e}")
-                    self.ui.RateE.clear()
-        else:
+        try:
+            self.ui.LastNameTrainerEdit.clear()
+            self.ui.FirstNameTrainerEdit.clear()
+            self.ui.MidleNameTrainerEdit.clear()
+            self.ui.PhoneTrainer.clear()
+            self.ui.EmailTrainerEdit.clear()
+            self.ui.TrainerTypeComboBox.setCurrentIndex(0)
             self.ui.RateE.clear()
+            self.ui.IdTrainerE.clear()
+            self.clear_photo()
+            self.ui.SaveTrainerBtn.setText("Сохранить")
+            self.ui.DeleteTrainerBtn.setEnabled(False)
+            self.ui.Add_clientBtn.setEnabled(True)
+            self.hide_edit_panel()
+        except Exception:
+            logger.exception("reset_form encountered problem")
+
+    def show_edit_panel(self):
+        try:
+            self.ui.widget_2.setVisible(True)
+        except Exception:
+            logger.exception("show_edit_panel failed")
+
+    def hide_edit_panel(self):
+        try:
+            self.ui.widget_2.setVisible(False)
+        except Exception:
+            logger.exception("hide_edit_panel failed")
 
     def add_trainer(self):
-        """Кнопка 'Добавить' - сброс формы для нового тренера"""
-        self.show_edit_panel()
         self.reset_form()
+        self.show_edit_panel()
         self.ui.LastNameTrainerEdit.setFocus()
 
     def get_selected_trainer_id(self):
-        """Получение ID выбранного тренера из таблицы"""
-        selected_row = self.ui.TrainerTableWidget.currentRow()
-        if selected_row >= 0:
-            item = self.ui.TrainerTableWidget.item(selected_row, 0)
-            if item:
-                return item.data(Qt.ItemDataRole.UserRole)
+        try:
+            r = self.ui.TrainerTableWidget.currentRow()
+            if r >= 0:
+                item = self.ui.TrainerTableWidget.item(r, 0)
+                if item:
+                    return item.data(Qt.ItemDataRole.UserRole)
+        except Exception:
+            logger.exception("get_selected_trainer_id failed")
         return None
 
-    def on_table_double_click(self, index):
-        """Обработка двойного клика по таблице - редактирование"""
-        trainer_id = self.get_selected_trainer_id()
-        if trainer_id:
-            self.edit_trainer(trainer_id)
+    def on_table_double_click(self, _index):
+        tid = self.get_selected_trainer_id()
+        if tid:
+            self.edit_trainer(tid)
 
-    def on_table_item_clicked(self, item):
-        """Обработка клика по элементу таблицы"""
-        trainer_id = self.get_selected_trainer_id()
-        if trainer_id:
-            self.edit_trainer(trainer_id)
+    def on_table_item_clicked(self, _item):
+        tid = self.get_selected_trainer_id()
+        if tid:
+            self.edit_trainer(tid)
 
     def edit_trainer(self, trainer_id=None):
-        """Редактирование выбранного тренера"""
-        if not trainer_id:
-            trainer_id = self.get_selected_trainer_id()
+        try:
+            if not trainer_id:
+                trainer_id = self.get_selected_trainer_id()
+            if not trainer_id:
+                QMessageBox.warning(self, "Предупреждение", "Выберите тренера")
+                return
 
-        if trainer_id:
-            try:
-                # Используем модель Trainer для загрузки данных
-                self.current_trainer = Trainer.get_by_id(trainer_id)
+            # Локальный импорт модели
+            from src.models.trainers import trainer_get_by_id as _get_by_id
+            tr = _get_by_id(trainer_id)
+            if not tr:
+                QMessageBox.warning(self, "Ошибка", "Тренер не найден")
+                return
 
-                if self.current_trainer:
-                    # Показываем панель редактирования
-                    self.show_edit_panel()
+            # tr — dict
+            self.current_trainer = tr
+            self.ui.LastNameTrainerEdit.setText(str(tr.get("last_name", "")))
+            self.ui.FirstNameTrainerEdit.setText(str(tr.get("first_name", "")))
+            self.ui.MidleNameTrainerEdit.setText(str(tr.get("middle_name", "") or ""))
+            self.ui.PhoneTrainer.setText(str(tr.get("phone", "") or ""))
+            self.ui.EmailTrainerEdit.setText(str(tr.get("email", "") or ""))
+            self.ui.IdTrainerE.setText(str(tr.get("trainer_id", "") or ""))
 
-                    # Заполняем форму
-                    self.ui.LastNameTrainerEdit.setText(self.current_trainer.last_name)
-                    self.ui.FirstNameTrainerEdit.setText(self.current_trainer.first_name)
-                    self.ui.MidleNameTrainerEdit.setText(
-                        self.current_trainer.middle_name if self.current_trainer.middle_name else "")
-                    self.ui.PhoneTrainer.setText(self.current_trainer.phone if self.current_trainer.phone else "")
+            tt_id = tr.get("trainer_type_id")
+            if tt_id:
+                idx = self.ui.TrainerTypeComboBox.findData(tt_id)
+                if idx >= 0:
+                    self.ui.TrainerTypeComboBox.setCurrentIndex(idx)
 
-                    # Устанавливаем ID карты (номер карты)
-                    self.ui.IdTrainerE.setText(str(self.current_trainer.trainer_id))
+            photo = tr.get("photo")
+            if photo:
+                pix = QPixmap()
+                pix.loadFromData(photo)
+                circ = make_circular_pixmap(pix, THUMBNAIL_SIZE)
+                self.ui.PhotoTrainerE.setPixmap(circ)
+                self.current_photo_data = photo
+            else:
+                self.clear_photo()
 
-                    # Устанавливаем выбранный тип тренера
-                    if self.current_trainer.trainer_type_id:
-                        index = self.ui.TrainerTypeComboBox.findData(self.current_trainer.trainer_type_id)
-                        if index >= 0:
-                            self.ui.TrainerTypeComboBox.setCurrentIndex(index)
-
-                    # Загружаем фото тренера, если оно есть
-                    if self.current_trainer.photo:
-                        try:
-                            # Предполагаем, что фото хранится в БД как BLOB
-                            pixmap = QPixmap()
-                            pixmap.loadFromData(self.current_trainer.photo)
-
-                            if not pixmap.isNull():
-                                scaled_pixmap = pixmap.scaled(
-                                    150, 150,
-                                    Qt.AspectRatioMode.KeepAspectRatio,
-                                    Qt.TransformationMode.SmoothTransformation
-                                )
-                                self.ui.PhotoTrainerE.setPixmap(scaled_pixmap)
-                                self.ui.PhotoTrainerE.setStyleSheet("""
-                                    QLabel {
-                                        border: 2px solid #4CAF50;
-                                        border-radius: 5px;
-                                        padding: 5px;
-                                    }
-                                """)
-                            else:
-                                self.clear_photo()
-                        except Exception as e:
-                            print(f"Ошибка загрузки фото из БД: {e}")
-                            self.clear_photo()
-                    else:
-                        self.clear_photo()
-
-                    # Активируем кнопку удаления
-                    self.ui.DeleteTrainerBtn.setEnabled(True)
-                    self.ui.SaveTrainerBtn.setText("Обновить")
-                    self.ui.Add_clientBtn.setEnabled(False)
-                else:
-                    QMessageBox.warning(self, "Ошибка", "Тренер не найден!")
-
-            except Exception as e:
-                QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить данные тренера: {str(e)}")
-        else:
-            QMessageBox.warning(self, "Предупреждение", "Выберите тренера для редактирования")
+            self.ui.DeleteTrainerBtn.setEnabled(True)
+            self.ui.SaveTrainerBtn.setText("Обновить")
+            self.ui.Add_clientBtn.setEnabled(False)
+            self.show_edit_panel()
+        except Exception as e:
+            logger.exception("edit_trainer failed: %s", e)
+            QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить данные тренера: {e}")
 
     def save_trainer(self):
-        """Сохранение/обновление тренера через модель"""
+        """Сохраняет или создаёт тренера, использует функциональные модели (локальные импорты)."""
         try:
-            # Получаем данные из формы
-            last_name = self.ui.LastNameTrainerEdit.text().strip()
-            first_name = self.ui.FirstNameTrainerEdit.text().strip()
-            middle_name = self.ui.MidleNameTrainerEdit.text().strip()
+            last = self.ui.LastNameTrainerEdit.text().strip()
+            first = self.ui.FirstNameTrainerEdit.text().strip()
+            middle = self.ui.MidleNameTrainerEdit.text().strip()
             phone = self.ui.PhoneTrainer.text().strip()
             trainer_type_id = self.ui.TrainerTypeComboBox.currentData()
+            email = self.ui.EmailTrainerEdit.text().strip()
 
-            # Валидация
-            if not last_name:
+            if not last:
                 QMessageBox.warning(self, "Ошибка", "Введите фамилию тренера!")
                 self.ui.LastNameTrainerEdit.setFocus()
                 return
-
-            if not first_name:
+            if not first:
                 QMessageBox.warning(self, "Ошибка", "Введите имя тренера!")
                 self.ui.FirstNameTrainerEdit.setFocus()
                 return
-
             if not trainer_type_id:
                 QMessageBox.warning(self, "Ошибка", "Выберите тип тренера!")
                 return
-
             if not phone:
                 QMessageBox.warning(self, "Ошибка", "Введите телефон тренера!")
                 self.ui.PhoneTrainer.setFocus()
                 return
 
-            if self.current_trainer:  # Редактирование существующего тренера
-                self.current_trainer.last_name = last_name
-                self.current_trainer.first_name = first_name
-                self.current_trainer.middle_name = middle_name
-                self.current_trainer.phone = phone
-                self.current_trainer.trainer_type_id = trainer_type_id
+            # Локальные импорты CRUD-функций
+            from src.models.trainers import (
+                trainer_create as _create,
+                trainer_update as _update
+            )
 
-                # Обновляем фото, если было выбрано новое
-                if self.current_photo_data:
-                    self.current_trainer.photo = self.current_photo_data
-                # Если фото не было выбрано новое, но было в БД, оставляем старое
-                # (фото остается как есть, если self.current_photo_data is None)
-
-                if self.current_trainer.save():
-                    QMessageBox.information(self, "Успех", "Данные тренера успешно обновлены!")
+            if self.current_trainer:
+                # обновление
+                trainer_id = self.current_trainer.get("trainer_id")
+                photo_bytes = self.current_photo_data if self.current_photo_data is not None else self.current_trainer.get("photo")
+                ok = _update(trainer_id, last, first, middle, photo_bytes, phone, trainer_type_id, email)
+                if ok:
+                    QMessageBox.information(self, "Успех", "Данные тренера обновлены!")
                 else:
-                    QMessageBox.critical(self, "Ошибка", "Не удалось обновить данные тренера")
-
-            else:  # Добавление нового тренера
-                # Создаем нового тренера
-                new_trainer = Trainer(
-                    last_name=last_name,
-                    first_name=first_name,
-                    middle_name=middle_name,
-                    phone=phone,
-                    trainer_type_id=trainer_type_id
-                )
-
-                # Добавляем фото, если оно было загружено
-                if self.current_photo_data:
-                    new_trainer.photo = self.current_photo_data
-
-                if new_trainer.save():
+                    QMessageBox.critical(self, "Ошибка", "Не удалось обновить тренера")
+            else:
+                # создание
+                photo_bytes = self.current_photo_data
+                new_id = _create(last, first, middle, photo_bytes, phone, trainer_type_id, email)
+                if new_id:
                     QMessageBox.information(self, "Успех", "Тренер успешно добавлен!")
                 else:
                     QMessageBox.critical(self, "Ошибка", "Не удалось добавить тренера")
 
-            # Обновляем таблицу и скрываем панель
             self.load_trainers()
-            self.hide_edit_panel()
             self.reset_form()
-
         except Exception as e:
-            QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить данные тренера: {str(e)}")
+            logger.exception("save_trainer failed: %s", e)
+            QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить тренера: {e}")
 
     def delete_trainer(self):
-        """Удаление текущего тренера через модель"""
-        if not self.current_trainer:
-            QMessageBox.warning(self, "Ошибка", "Нет выбранного тренера для удаления")
-            return
+        try:
+            if not self.current_trainer:
+                QMessageBox.warning(self, "Ошибка", "Нет выбранного тренера для удаления")
+                return
+            from src.models.trainers import trainer_delete as _delete
+            trainer_id = self.current_trainer.get("trainer_id")
+            reply = QMessageBox.question(self, "Подтверждение удаления",
+                                         f"Вы уверены, что хотите удалить тренера '{self.current_trainer.get('last_name','')}'?",
+                                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+            ok = _delete(trainer_id)
+            if ok:
+                QMessageBox.information(self, "Успех", "Тренер удален!")
+                self.load_trainers()
+                self.reset_form()
+            else:
+                QMessageBox.critical(self, "Ошибка", "Не удалось удалить тренера")
+        except Exception as e:
+            logger.exception("delete_trainer failed: %s", e)
+            QMessageBox.critical(self, "Ошибка", f"Не удалось удалить тренера: {e}")
 
-        reply = QMessageBox.question(
-            self,
-            "Подтверждение удаления",
-            f"Вы уверены, что хотите удалить тренера '{self.current_trainer.get_full_name()}'?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-
-        if reply == QMessageBox.StandardButton.Yes:
-            try:
-                if self.current_trainer.delete():
-                    QMessageBox.information(self, "Успех", "Тренер удален!")
-
-                    # Обновляем таблицу и скрываем панель
-                    self.load_trainers()
-                    self.hide_edit_panel()
-                    self.reset_form()
-                else:
-                    QMessageBox.critical(self, "Ошибка", "Не удалось удалить тренера")
-
-            except Exception as e:
-                QMessageBox.critical(self, "Ошибка", f"Не удалось удалить тренера: {str(e)}")
-
+    # -----------------------
+    # Поиск
+    # -----------------------
     def on_search_last_name_changed(self, text):
-        """Обработчик изменения поля поиска по фамилии"""
-        if text.strip():
-            self.search_trainers_by_last_name(text.strip())
-        else:
-            self.load_trainers()  # Если поле пустое, показываем всех
+        txt = text.strip()
+        try:
+            if not txt:
+                self.load_trainers(); return
+            from src.models.trainers import trainer_search_by_last_name as _search
+            rows = _search(txt)
+            # rows — список dict
+            self._fill_table_from_list(rows)
+        except Exception:
+            logger.exception("on_search_last_name_changed failed")
 
     def on_search_phone_changed(self, text):
-        """Обработчик изменения поля поиска по телефону"""
-        if text.strip():
-            self.search_trainers_by_phone(text.strip())
-        else:
-            self.load_trainers()  # Если поле пустое, показываем всех
+        txt = text.strip()
+        try:
+            if not txt:
+                self.load_trainers(); return
+            from src.models.trainers import trainer_search_by_phone as _search
+            rows = _search(txt)
+            self._fill_table_from_list(rows)
+        except Exception:
+            logger.exception("on_search_phone_changed_failed")
 
-    def search_trainers_by_last_name(self, last_name):
-        """Поиск тренеров по фамилии"""
+    def _fill_table_from_list(self, trainers_list):
         try:
             self.ui.TrainerTableWidget.setRowCount(0)
+            for rnum, tr in enumerate(trainers_list):
+                self.ui.TrainerTableWidget.insertRow(rnum)
+                item_last = QTableWidgetItem(str(tr.get("last_name","")))
+                item_last.setFlags(item_last.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                item_last.setData(Qt.ItemDataRole.UserRole, tr.get("trainer_id"))
 
-            # Используем метод поиска модели Trainer
-            trainers = Trainer.search_by_last_name(last_name)
+                item_first = QTableWidgetItem(str(tr.get("first_name","")))
+                item_first.setFlags(item_first.flags() & ~Qt.ItemFlag.ItemIsEditable)
 
-            if trainers:
-                for row_num, trainer in enumerate(trainers):
-                    self.ui.TrainerTableWidget.insertRow(row_num)
+                item_mid = QTableWidgetItem(str(tr.get("middle_name","")))
+                item_mid.setFlags(item_mid.flags() & ~Qt.ItemFlag.ItemIsEditable)
 
-                    item_last_name = QTableWidgetItem(str(trainer.last_name))
-                    item_last_name.setFlags(item_last_name.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                    item_last_name.setData(Qt.ItemDataRole.UserRole, trainer.trainer_id)
+                item_phone = QTableWidgetItem(str(tr.get("phone","")))
+                item_phone.setFlags(item_phone.flags() & ~Qt.ItemFlag.ItemIsEditable)
 
-                    item_first_name = QTableWidgetItem(str(trainer.first_name))
-                    item_first_name.setFlags(item_first_name.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                self.ui.TrainerTableWidget.setItem(rnum, 0, item_last)
+                self.ui.TrainerTableWidget.setItem(rnum, 1, item_first)
+                self.ui.TrainerTableWidget.setItem(rnum, 2, item_mid)
+                self.ui.TrainerTableWidget.setItem(rnum, 3, item_phone)
+        except Exception:
+            logger.exception("_fill_table_from_list failed")
 
-                    item_middle_name = QTableWidgetItem(str(trainer.middle_name) if trainer.middle_name else "")
-                    item_middle_name.setFlags(item_middle_name.flags() & ~Qt.ItemFlag.ItemIsEditable)
-
-                    item_phone = QTableWidgetItem(str(trainer.phone) if trainer.phone else "")
-                    item_phone.setFlags(item_phone.flags() & ~Qt.ItemFlag.ItemIsEditable)
-
-                    self.ui.TrainerTableWidget.setItem(row_num, 0, item_last_name)
-                    self.ui.TrainerTableWidget.setItem(row_num, 1, item_first_name)
-                    self.ui.TrainerTableWidget.setItem(row_num, 2, item_middle_name)
-                    self.ui.TrainerTableWidget.setItem(row_num, 3, item_phone)
-
-            self.make_table_readonly()
-
-        except Exception as e:
-            print(f"Ошибка поиска тренеров: {e}")
-
-    def search_trainers_by_phone(self, phone):
-        """Поиск тренеров по телефону"""
+    # -----------------------
+    # Режим выбора типа тренера (показываем ставку)
+    # -----------------------
+    def on_trainer_type_changed(self, index):
         try:
-            self.ui.TrainerTableWidget.setRowCount(0)
+            tid = self.ui.TrainerTypeComboBox.itemData(index)
+            if not tid:
+                self.ui.RateE.clear()
+                return
+            # локальный импорт
+            from src.models.trainer_types import trainer_type_get_by_id as _get_by_id
+            tt = _get_by_id(tid)
+            if tt:
+                # tt — dict {'trainer_type_id','trainer_type_name','rate'}
+                rate = tt.get("rate")
+                self.ui.RateE.setText(f"{rate} руб." if rate is not None else "")
+            else:
+                self.ui.RateE.clear()
+        except Exception:
+            logger.exception("on_trainer_type_changed failed")
 
-            # Используем метод поиска модели Trainer
-            trainers = Trainer.search_by_phone(phone)
-
-            if trainers:
-                for row_num, trainer in enumerate(trainers):
-                    self.ui.TrainerTableWidget.insertRow(row_num)
-
-                    item_last_name = QTableWidgetItem(str(trainer.last_name))
-                    item_last_name.setFlags(item_last_name.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                    item_last_name.setData(Qt.ItemDataRole.UserRole, trainer.trainer_id)
-
-                    item_first_name = QTableWidgetItem(str(trainer.first_name))
-                    item_first_name.setFlags(item_first_name.flags() & ~Qt.ItemFlag.ItemIsEditable)
-
-                    item_middle_name = QTableWidgetItem(str(trainer.middle_name) if trainer.middle_name else "")
-                    item_middle_name.setFlags(item_middle_name.flags() & ~Qt.ItemFlag.ItemIsEditable)
-
-                    item_phone = QTableWidgetItem(str(trainer.phone) if trainer.phone else "")
-                    item_phone.setFlags(item_phone.flags() & ~Qt.ItemFlag.ItemIsEditable)
-
-                    self.ui.TrainerTableWidget.setItem(row_num, 0, item_last_name)
-                    self.ui.TrainerTableWidget.setItem(row_num, 1, item_first_name)
-                    self.ui.TrainerTableWidget.setItem(row_num, 2, item_middle_name)
-                    self.ui.TrainerTableWidget.setItem(row_num, 3, item_phone)
-
-            self.make_table_readonly()
-
-        except Exception as e:
-            print(f"Ошибка поиска тренеров: {e}")
-
-    # Методы навигации
+    # -----------------------
+    # Навигация (локальные импорты)
+    # -----------------------
     def open_services(self):
-        """Открыть окно услуг"""
         try:
             from src.views.service_window import ServiceForm
             self.service_window = ServiceForm(self.user_id, self.user_email, self.user_role)
-            self.service_window.show()
-            self.close()
-        except ImportError as e:
-            print(f"Ошибка импорта: {e}")
+            self.service_window.show(); self.close()
+        except Exception:
+            logger.exception("open_services failed")
             QMessageBox.warning(self, "В разработке", "Окно услуг находится в разработке")
-        except Exception as e:
-            print(f"Ошибка открытия окна услуг: {e}")
-            QMessageBox.critical(self, "Ошибка", f"Не удалось открыть окно услуг: {str(e)}")
 
     def open_schedule(self):
-        """Открыть окно расписания"""
         try:
             from src.views.schedule_window import ScheduleWindow
             self.schedule_window = ScheduleWindow(self.user_id, self.user_email, self.user_role)
-            self.schedule_window.show()
-            self.close()
-        except ImportError as e:
-            print(f"Ошибка импорта ScheduleWindow: {e}")
+            self.schedule_window.show(); self.close()
+        except Exception:
+            logger.exception("open_schedule failed")
             QMessageBox.warning(self, "В разработке", "Окно расписания находится в разработке")
-        except Exception as e:
-            print(f"Ошибка открытия окна расписания: {e}")
-            QMessageBox.critical(self, "Ошибка", f"Не удалось открыть окно расписания: {str(e)}")
 
     def open_clients(self):
-        """Открыть окно клиентов"""
-        QMessageBox.information(self, "В разработке", "Окно клиентов находится в разработке")
-
-    def on_trainers_clicked(self):
-        """Обработчик кнопки 'Тренеры'"""
-        pass
+        try:
+            from src.views.client_window import ClientWindow
+            self.client_window = ClientWindow(self.user_id, self.user_email, self.user_role)
+            self.client_window.show(); self.close()
+        except Exception:
+            logger.exception("open_clients failed")
+            QMessageBox.warning(self, "В разработке", "Окно клиентов находится в разработке")
 
     def open_halls(self):
-        """Открыть окно залов"""
         try:
+            from src.views.hall_window import HallWindow
             self.hall_window = HallWindow(self.user_id, self.user_email, self.user_role)
-            self.hall_window.show()
-            self.close()
-        except Exception as e:
-            print(f"Ошибка открытия окна залов: {e}")
-            QMessageBox.critical(self, "Ошибка", f"Не удалось открыть окна залов: {str(e)}")
+            self.hall_window.show(); self.close()
+        except Exception:
+            logger.exception("open_halls failed")
+            QMessageBox.warning(self, "В разработке", "Окно залов находится в разработке")
 
     def open_reports(self):
-        """Открыть окно отчетов"""
         QMessageBox.information(self, "В разработке", "Окно отчетов находится в разработке")

@@ -32,7 +32,6 @@ CREATE TABLE trainer_types (
     rate INT
 );
 
--- Таблица тренеров
 CREATE TABLE trainers (
     trainer_id INT PRIMARY KEY AUTO_INCREMENT,
     last_name VARCHAR(50) NOT NULL,
@@ -40,9 +39,11 @@ CREATE TABLE trainers (
     middle_name VARCHAR(50),
     photo LONGBLOB,
     phone VARCHAR(20),
+    email VARCHAR(50),
     trainer_type_id INT NOT NULL,
     FOREIGN KEY (trainer_type_id) REFERENCES trainer_types(trainer_type_id)
 );
+
 
 -- Таблица стоимости абонементов
 CREATE TABLE subscription_prices (

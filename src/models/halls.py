@@ -8,96 +8,55 @@ class Hall:
         self.hall_name = hall_name
         self.capacity = capacity
 
-    def __str__(self):
-        return f"{self.hall_name} (вместимость: {self.capacity})"
+    # ---------- CRUD ----------
+    @staticmethod
+    def create(hall_name, capacity):
+        query = """INSERT INTO halls (hall_name, capacity) VALUES (%s, %s)"""
+        db.execute_query(query, (hall_name, capacity))
+        new_id = db.execute_query("SELECT LAST_INSERT_ID()")
+        return Hall(hall_id=new_id[0][0], hall_name=hall_name, capacity=capacity)
 
-    def save(self):
-        """Сохранить зал в БД (добавить или обновить)"""
-        if self.hall_id:  # Обновление существующего зала
-            query = """
-            UPDATE halls 
-            SET hall_name = %s, capacity = %s
-            WHERE hall_id = %s
-            """
-            params = (self.hall_name, self.capacity, self.hall_id)
-            result = db.execute_query(query, params)
-            return result is not None
-        else:  # Добавление нового зала
-            query = """
-            INSERT INTO halls (hall_name, capacity)
-            VALUES (%s, %s)
-            """
-            params = (self.hall_name, self.capacity)
-            result = db.execute_query(query, params)
-
-            if result:
-                # Получаем ID новой записи
-                query = "SELECT LAST_INSERT_ID()"
-                result = db.execute_query(query)
-                if result:
-                    self.hall_id = result[0][0]
-            return result is not None
+    def update(self):
+        query = """UPDATE halls SET hall_name=%s, capacity=%s WHERE hall_id=%s"""
+        db.execute_query(query, (self.hall_name, self.capacity, self.hall_id))
+        return True
 
     def delete(self):
-        """Удалить зал из БД"""
         if not self.hall_id:
             return False
+        db.execute_query("DELETE FROM halls WHERE hall_id=%s", (self.hall_id,))
+        return True
 
-        query = "DELETE FROM halls WHERE hall_id = %s"
-        result = db.execute_query(query, (self.hall_id,))
-        return result is not None
-
+    # ---------- READ ----------
     @staticmethod
     def get_all():
-        """Получить все залы из БД"""
-        query = "SELECT hall_id, hall_name, capacity FROM halls ORDER BY hall_name"
-        result = db.execute_query(query)
-
-        halls = []
-        if result:
-            for row in result:
-                hall = Hall(hall_id=row[0], hall_name=row[1], capacity=row[2])
-                halls.append(hall)
-        return halls
+        result = db.execute_query(
+            "SELECT hall_id, hall_name, capacity FROM halls ORDER BY hall_name"
+        )
+        return [Hall(*row) for row in result] if result else []
 
     @staticmethod
     def get_by_id(hall_id):
-        """Получить зал по ID"""
-        query = "SELECT hall_name, capacity FROM halls WHERE hall_id = %s"
-        result = db.execute_query(query, (hall_id,))
-
-        if result and len(result) > 0:
-            hall_name, capacity = result[0]
-            return Hall(hall_id, hall_name, capacity)
-        return None
-
-    @staticmethod
-    def check_name_exists(hall_name, exclude_id=None):
-        """Проверить, существует ли зал с таким названием"""
-        if exclude_id:
-            query = "SELECT COUNT(*) FROM halls WHERE hall_name = %s AND hall_id != %s"
-            result = db.execute_query(query, (hall_name, exclude_id))
-        else:
-            query = "SELECT COUNT(*) FROM halls WHERE hall_name = %s"
-            result = db.execute_query(query, (hall_name,))
-
-        if result:
-            return result[0][0] > 0
-        return False
-
-    def to_dict(self):
-        """Преобразовать объект в словарь"""
-        return {
-            'hall_id': self.hall_id,
-            'hall_name': self.hall_name,
-            'capacity': self.capacity
-        }
-
-    @classmethod
-    def from_dict(cls, data):
-        """Создать объект из словаря"""
-        return cls(
-            hall_id=data.get('hall_id'),
-            hall_name=data.get('hall_name', ''),
-            capacity=data.get('capacity', 0)
+        result = db.execute_query(
+            "SELECT hall_name, capacity FROM halls WHERE hall_id=%s",
+            (hall_id,)
         )
+        if not result:
+            return None
+        return Hall(hall_id, result[0][0], result[0][1])
+
+    # ---------- VALIDATION ----------
+    @staticmethod
+    def name_exists(hall_name, exclude_id=None):
+        if exclude_id:
+            res = db.execute_query(
+                "SELECT COUNT(*) FROM halls WHERE hall_name=%s AND hall_id!=%s",
+                (hall_name, exclude_id)
+            )
+        else:
+            res = db.execute_query(
+                "SELECT COUNT(*) FROM halls WHERE hall_name=%s",
+                (hall_name,)
+            )
+        return res[0][0] > 0
+

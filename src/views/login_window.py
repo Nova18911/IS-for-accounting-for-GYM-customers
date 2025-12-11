@@ -60,12 +60,6 @@ class LoginWindow(QMainWindow):
             if result and len(result) > 0:
                 user_id, user_email, role = result[0]
 
-                QMessageBox.information(
-                    self, "Успех",
-                    f"Авторизация успешна!\n\n"
-                    f"Добро пожаловать, {user_email}!"
-                )
-
                 # Очищаем поля
                 self.ui.Email.clear()
                 self.ui.password.clear()

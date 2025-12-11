@@ -1,9 +1,49 @@
-class Subscription:
+# models/subscriptions.py
+from src.database.connector import db
+from datetime import datetime, timedelta
 
-    def __init__(self, subscription_id=None, start_date=None, subscription_price_id=None):
-        self.subscription_id = subscription_id  # subscription_id (Код_абонемента)
-        self.start_date = start_date  # start_date (Дата_начала_действия)
-        self.subscription_price_id = subscription_price_id  # subscription_price_id (idстоимость_абонемента)
+DURATION_MAP = {
+    '1 месяц': 30,
+    '3 месяца': 90,
+    'полгода': 180,
+    'год': 365
+}
 
-    def __str__(self):
-        return f"Абонемент №{self.subscription_id} от {self.start_date}"
+
+def subscription_create(start_date, price_id):
+    sql = "INSERT INTO subscriptions (start_date, subscription_price_id) VALUES (%s, %s)"
+    db.execute_query(sql, (start_date, price_id))
+    return db.get_last_insert_id()
+
+
+def subscription_update(subscription_id, start_date, price_id):
+    sql = """
+        UPDATE subscriptions 
+        SET start_date=%s, subscription_price_id=%s
+        WHERE subscription_id=%s
+    """
+    db.execute_query(sql, (start_date, price_id, subscription_id))
+    return True
+
+
+def subscription_delete(subscription_id):
+    db.execute_query("DELETE FROM subscriptions WHERE subscription_id=%s", (subscription_id,))
+    return True
+
+
+def subscription_attach_to_client(subscription_id, client_id):
+    sql = "UPDATE clients SET subscription_id=%s WHERE client_id=%s"
+    db.execute_query(sql, (subscription_id, client_id))
+    return True
+
+
+def subscription_detach_client(client_id):
+    db.execute_query("UPDATE clients SET subscription_id=NULL WHERE client_id=%s", (client_id,))
+    return True
+
+
+def subscription_calculate_end(start_date, duration):
+    if isinstance(start_date, str):
+        start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+    days = DURATION_MAP.get(duration, 30)
+    return start_date + timedelta(days=days)

@@ -283,7 +283,17 @@ class HallWindow(QMainWindow):
 
     def open_schedule(self):
         """Открыть окно расписания"""
-        QMessageBox.information(self, "В разработке", "Окно расписания находится в разработке")
+        try:
+            from src.views.schedule_window import ScheduleWindow
+            self.schedule_window = ScheduleWindow(self.user_id, self.user_email, self.user_role)
+            self.schedule_window.show()
+            self.close()
+        except ImportError as e:
+            print(f"Ошибка импорта ScheduleWindow: {e}")
+            QMessageBox.warning(self, "В разработке", "Окно расписания находится в разработке")
+        except Exception as e:
+            print(f"Ошибка открытия окна расписания: {e}")
+            QMessageBox.critical(self, "Ошибка", f"Не удалось открыть окно расписания: {str(e)}")
 
     def open_clients(self):
         """Открыть окно клиентов"""

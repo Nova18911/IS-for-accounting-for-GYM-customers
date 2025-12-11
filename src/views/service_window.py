@@ -1,214 +1,82 @@
-import sys
-from PyQt6.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QMessageBox
+from typing import Optional
+
+# src/views/service_window.py
+from PyQt6.QtWidgets import QMainWindow, QTableWidgetItem, QMessageBox
 from PyQt6.QtCore import Qt
 
 from src.ui.service_window import Ui_ServiceForm
-from src.models.services import Service
+from src.models import services as service_model
 from src.models.halls import Hall
 
 
-
 class ServiceForm(QMainWindow):
-    """Главное окно приложения - Услуги"""
+    """Окно управления услугами (упрощённая версия)"""
+
+    HALL_COLOR_MAP = {
+        1: "#FFB6C1", 2: "#87CEFA", 3: "#98FB98", 4: "#DDA0DD", 5: "#FFD700",
+        6: "#F0E68C", 7: "#ADD8E6", 8: "#90EE90", 9: "#FFA07A", 10: "#20B2AA",
+        11: "#B0C4DE", 12: "#FFDEAD", 13: "#AFEEEE", 14: "#E6E6FA", 15: "#FFF0F5",
+        16: "#F5FFFA", 17: "#FFFACD", 18: "#FAFAD2", 19: "#F0FFF0", 20: "#F5F5DC",
+    }
 
     def __init__(self, user_id=None, user_email=None, user_role=None):
         super().__init__()
         self.ui = Ui_ServiceForm()
         self.ui.setupUi(self)
 
-        # Данные пользователя
         self.user_id = user_id
         self.user_email = user_email
         self.user_role = user_role
 
-        # Текущая редактируемая услуга
-        self.current_service = None
+        self.current_service_id = None
 
-        # Словарь цветов для залов
-        self.hall_colors = self.create_hall_colors()
-
-        # Устанавливаем заголовок окна
         self.setWindowTitle("Фитнес-Менеджер - Услуги")
-
-        # Настраиваем интерфейс
         self.setup_interface()
-
-        # Загружаем данные
-        self.load_halls()  # Загружаем залы в ComboBox
-        self.load_services()  # Загружаем услуги в таблицу
-
-        # Подключаем кнопки
+        self.load_halls()
+        self.load_services()
         self.connect_buttons()
-
-        # Скрываем правую панель при запуске
         self.hide_edit_panel()
-
-        # Сбрасываем форму добавления/редактирования
         self.reset_form()
 
-    def create_hall_colors(self):
-        """Создание словаря цветов для залов"""
-        return {
-            1: "#FFB6C1",  # Light Pink
-            2: "#87CEFA",  # Light Sky Blue
-            3: "#98FB98",  # Pale Green
-            4: "#DDA0DD",  # Plum
-            5: "#FFD700",  # Gold
-            6: "#F0E68C",  # Khaki
-            7: "#ADD8E6",  # Light Blue
-            8: "#90EE90",  # Light Green
-            9: "#FFA07A",  # Light Salmon
-            10: "#20B2AA",  # Light Sea Green
-            11: "#B0C4DE",  # Light Steel Blue
-            12: "#FFDEAD",  # Navajo White
-            13: "#AFEEEE",  # Pale Turquoise
-            14: "#E6E6FA",  # Lavender
-            15: "#FFF0F5",  # Lavender Blush
-            16: "#F5FFFA",  # Mint Cream
-            17: "#FFFACD",  # Lemon Chiffon
-            18: "#FAFAD2",  # Light Goldenrod Yellow
-            19: "#F0FFF0",  # Honeydew
-            20: "#F5F5DC",  # Beige
-        }
+    # ---------------- UI / INIT ----------------
 
     def setup_interface(self):
-        """Настройка интерфейса"""
-        # Настраиваем таблицу
-        self.ui.TableService.setColumnWidth(0, 200)  # Вид услуги
-        self.ui.TableService.setColumnWidth(1, 150)  # Зал
-        self.ui.TableService.setColumnWidth(2, 150)  # Макс. человек
-        self.ui.TableService.setColumnWidth(3, 120)  # Стоимость
+        self.ui.TableService.setColumnWidth(0, 200)
+        self.ui.TableService.setColumnWidth(1, 150)
+        self.ui.TableService.setColumnWidth(2, 150)
+        self.ui.TableService.setColumnWidth(3, 120)
 
-        # Разрешаем выделение строк
-        self.ui.TableService.setSelectionBehavior(
-            self.ui.TableService.SelectionBehavior.SelectRows
-        )
-
-        # Отключаем редактирование ячеек
-        self.ui.TableService.setEditTriggers(
-            self.ui.TableService.EditTrigger.NoEditTriggers
-        )
-
-        # Подключаем двойной клик по таблице
-        self.ui.TableService.doubleClicked.connect(self.on_table_double_click)
-
-        # Подключаем одиночный клик по таблице
-        self.ui.TableService.itemClicked.connect(self.on_table_item_clicked)
-
-    def show_edit_panel(self):
-        """Показать правую панель для добавления/редактирования"""
-        self.ui.widget_2.setVisible(True)
-
-    def hide_edit_panel(self):
-        """Скрыть правую панель для добавления/редактирования"""
-        self.ui.widget_2.setVisible(False)
-
-    def make_table_readonly(self):
-        """Делает таблицу полностью нередактируемой"""
-        for row in range(self.ui.TableService.rowCount()):
-            for col in range(self.ui.TableService.columnCount()):
-                item = self.ui.TableService.item(row, col)
-                if item:
-                    current_flags = item.flags()
-                    new_flags = current_flags & ~Qt.ItemFlag.ItemIsEditable
-                    item.setFlags(new_flags)
-
-    def load_halls(self):
-        """Загрузка списка залов из БД в ComboBox через модель"""
-        try:
-            self.ui.HallComboBox.clear()
-            self.ui.HallComboBox.addItem("Выберите зал", None)
-
-            # Используем модель Hall для получения данных
-            halls = Hall.get_all()
-
-            if halls:
-                for hall in halls:
-                    self.ui.HallComboBox.addItem(hall.hall_name, hall.hall_id)
-
-        except Exception as e:
-            print(f"Ошибка загрузки залов: {e}")
-            QMessageBox.warning(self, "Ошибка", f"Не удалось загрузить список залов: {str(e)}")
-
-    def load_services(self):
-        """Загрузка услуг из БД в таблицу через модель"""
-        try:
-            self.ui.TableService.setRowCount(0)
-
-            # Используем модель Service для получения данных
-            services = Service.get_all()
-
-            if services:
-                for row_num, service in enumerate(services):
-                    self.ui.TableService.insertRow(row_num)
-
-                    # Получаем информацию о зале для отображения
-                    hall_info = ""
-                    hall_capacity = ""
-
-                    if service.hall_id:
-                        hall = Hall.get_by_id(service.hall_id)
-                        if hall:
-                            hall_info = hall.hall_name
-                            hall_capacity = str(hall.capacity)
-
-                    # Создаем ячейки ТОЛЬКО ДЛЯ ЧТЕНИЯ
-                    item_name = QTableWidgetItem(str(service.service_name))
-                    item_name.setFlags(item_name.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                    item_name.setData(Qt.ItemDataRole.UserRole, service.service_id)
-
-                    item_hall = QTableWidgetItem(hall_info if hall_info else "Не указан")
-                    item_hall.setFlags(item_hall.flags() & ~Qt.ItemFlag.ItemIsEditable)
-
-                    item_capacity = QTableWidgetItem(hall_capacity if hall_capacity else "Не указана")
-                    item_capacity.setFlags(item_capacity.flags() & ~Qt.ItemFlag.ItemIsEditable)
-
-                    item_price = QTableWidgetItem(str(service.price) if service.price else "Не указана")
-                    item_price.setFlags(item_price.flags() & ~Qt.ItemFlag.ItemIsEditable)
-
-                    # Устанавливаем ячейки
-                    self.ui.TableService.setItem(row_num, 0, item_name)
-                    self.ui.TableService.setItem(row_num, 1, item_hall)
-                    self.ui.TableService.setItem(row_num, 2, item_capacity)
-                    self.ui.TableService.setItem(row_num, 3, item_price)
-
-            self.make_table_readonly()
-
-        except Exception as e:
-            print(f"Ошибка загрузки услуг: {e}")
-            QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить услуги: {str(e)}")
+        self.ui.TableService.setSelectionBehavior(self.ui.TableService.SelectionBehavior.SelectRows)
+        self.ui.TableService.setEditTriggers(self.ui.TableService.EditTrigger.NoEditTriggers)
+        self.ui.TableService.doubleClicked.connect(lambda idx: self.edit_selected_service())
+        self.ui.TableService.itemClicked.connect(lambda item: self.edit_selected_service())
 
     def connect_buttons(self):
-        """Подключение обработчиков кнопок"""
-        # Кнопка "Добавить"
         self.ui.AddServiceBtn.clicked.connect(self.add_service)
-
-        # Кнопка "Сохранить"
         self.ui.SaveServiceBtn.clicked.connect(self.save_service)
-
-        # Кнопка "Удалить"
         self.ui.DeleteServiceBtn.clicked.connect(self.delete_service)
-
-        # Кнопка "Выход"
         self.ui.ExitBtn.clicked.connect(self.close)
 
-        # Кнопки навигации
-        self.ui.ServiceBtn.clicked.connect(self.on_services_clicked)
+        self.ui.ServiceBtn.clicked.connect(lambda: None)
         self.ui.ScheduleBtn.clicked.connect(self.on_schedule_clicked)
         self.ui.ClientsBtn.clicked.connect(self.on_clients_clicked)
         self.ui.TrainerBtn.clicked.connect(self.on_trainers_clicked)
         self.ui.HallBtn.clicked.connect(self.on_halls_clicked)
         self.ui.ReportBtn.clicked.connect(self.on_reports_clicked)
 
-        # Делаем кнопку "Услуги" неактивной
         self.ui.ServiceBtn.setEnabled(False)
-
-        # Подключаем изменение выбранного зала
         self.ui.HallComboBox.currentIndexChanged.connect(self.on_hall_changed)
 
+    # ---------------- Helpers ----------------
+
+    def show_edit_panel(self):
+        self.ui.widget_2.setVisible(True)
+
+    def hide_edit_panel(self):
+        self.ui.widget_2.setVisible(False)
+
     def reset_form(self):
-        """Сброс формы добавления/редактирования"""
-        self.current_service = None
+        self.current_service_id = None
         self.ui.TypeServiceEdit.clear()
         self.ui.HallComboBox.setCurrentIndex(0)
         self.ui.PriceEdit.clear()
@@ -219,201 +87,196 @@ class ServiceForm(QMainWindow):
         self.ui.DeleteServiceBtn.setEnabled(False)
         self.ui.AddServiceBtn.setEnabled(True)
 
+    def make_table_readonly(self):
+        for r in range(self.ui.TableService.rowCount()):
+            for c in range(self.ui.TableService.columnCount()):
+                itm = self.ui.TableService.item(r, c)
+                if itm:
+                    itm.setFlags(itm.flags() & ~Qt.ItemFlag.ItemIsEditable)
+
+    # ---------------- Loading ----------------
+
+    def load_halls(self):
+        """Заполнить ComboBox залов"""
+        self.ui.HallComboBox.clear()
+        self.ui.HallComboBox.addItem("Выберите зал", None)
+        halls = Hall.get_all()
+        for h in halls:
+            self.ui.HallComboBox.addItem(h.hall_name, h.hall_id)
+
+    def load_services(self):
+        """Загрузить услуги в таблицу"""
+        services = service_model.get_all_services()
+        self.ui.TableService.setRowCount(0)
+
+        for row_idx, svc in enumerate(services):
+            self.ui.TableService.insertRow(row_idx)
+
+            hall_name = ""
+            hall_capacity = ""
+            if svc["hall_id"]:
+                hall = Hall.get_by_id(svc["hall_id"])
+                if hall:
+                    hall_name = hall.hall_name
+                    hall_capacity = str(hall.capacity)
+
+            item_name = QTableWidgetItem(svc["service_name"])
+            item_name.setData(Qt.ItemDataRole.UserRole, svc["service_id"])
+            item_name.setFlags(item_name.flags() & ~Qt.ItemFlag.ItemIsEditable)
+
+            item_hall = QTableWidgetItem(hall_name or "Не указан")
+            item_hall.setFlags(item_hall.flags() & ~Qt.ItemFlag.ItemIsEditable)
+
+            item_capacity = QTableWidgetItem(hall_capacity or "Не указана")
+            item_capacity.setFlags(item_capacity.flags() & ~Qt.ItemFlag.ItemIsEditable)
+
+            item_price = QTableWidgetItem(str(svc["price"]) if svc["price"] is not None else "Не указана")
+            item_price.setFlags(item_price.flags() & ~Qt.ItemFlag.ItemIsEditable)
+
+            self.ui.TableService.setItem(row_idx, 0, item_name)
+            self.ui.TableService.setItem(row_idx, 1, item_hall)
+            self.ui.TableService.setItem(row_idx, 2, item_capacity)
+            self.ui.TableService.setItem(row_idx, 3, item_price)
+
+        self.make_table_readonly()
+
+    # ---------------- Interaction ----------------
+
+    def get_selected_service_id(self) -> Optional[int]:
+        row = self.ui.TableService.currentRow()
+        if row >= 0:
+            itm = self.ui.TableService.item(row, 0)
+            if itm:
+                return itm.data(Qt.ItemDataRole.UserRole)
+        return None
+
+    def edit_selected_service(self):
+        svc_id = self.get_selected_service_id()
+        if not svc_id:
+            QMessageBox.warning(self, "Предупреждение", "Выберите услугу для редактирования")
+            return
+        svc = service_model.get_service_by_id(svc_id)
+        if not svc:
+            QMessageBox.warning(self, "Ошибка", "Услуга не найдена")
+            return
+
+        self.current_service_id = svc_id
+        self.show_edit_panel()
+        self.ui.TypeServiceEdit.setText(svc["service_name"])
+        self.ui.PriceEdit.setText(str(svc["price"]) if svc["price"] is not None else "")
+        if svc["hall_id"]:
+            idx = self.ui.HallComboBox.findData(svc["hall_id"])
+            if idx >= 0:
+                self.ui.HallComboBox.setCurrentIndex(idx)
+        self.ui.DeleteServiceBtn.setEnabled(True)
+        self.ui.SaveServiceBtn.setText("Обновить")
+        self.ui.AddServiceBtn.setEnabled(False)
+
+    def add_service(self):
+        self.reset_form()
+        self.show_edit_panel()
+        self.ui.TypeServiceEdit.setFocus()
+
     def on_hall_changed(self, index):
-        """Обработчик изменения выбранного зала"""
-        if index > 0:  # index 0 это "Выберите зал"
-            hall_id = self.ui.HallComboBox.currentData()
-            if hall_id:
-                try:
-                    # Используем модель Hall для получения данных
-                    hall = Hall.get_by_id(hall_id)
+        if index <= 0:
+            self.ui.label_MaxE.clear()
+            self.ui.labelColorE.clear()
+            self.ui.labelColorE.setStyleSheet("")
+            return
 
-                    if hall:
-                        self.ui.label_MaxE.setText(str(hall.capacity))
+        hall_id = self.ui.HallComboBox.currentData()
+        if not hall_id:
+            self.ui.label_MaxE.clear()
+            self.ui.labelColorE.clear()
+            self.ui.labelColorE.setStyleSheet("")
+            return
 
-                        # Устанавливаем цвет из словаря
-                        if hall.hall_id in self.hall_colors:
-                            color = self.hall_colors[hall.hall_id]
-                            self.ui.labelColorE.setText(color)
-                            self.ui.labelColorE.setStyleSheet(
-                                f"background-color: {color}; border: 1px solid #000;"
-                            )
-                        else:
-                            default_color = "#FFFFFF"
-                            self.ui.labelColorE.setText(default_color)
-                            self.ui.labelColorE.setStyleSheet(
-                                f"background-color: {default_color}; border: 1px solid #000;"
-                            )
-                    else:
-                        self.ui.label_MaxE.clear()
-                        self.ui.labelColorE.clear()
-                        self.ui.labelColorE.setStyleSheet("")
-
-                except Exception as e:
-                    print(f"Ошибка получения данных зала: {e}")
-                    self.ui.label_MaxE.clear()
-                    self.ui.labelColorE.clear()
-                    self.ui.labelColorE.setStyleSheet("")
+        hall = Hall.get_by_id(hall_id)
+        if hall:
+            self.ui.label_MaxE.setText(str(hall.capacity))
+            color = self.HALL_COLOR_MAP.get(hall.hall_id, "#FFFFFF")
+            self.ui.labelColorE.setText(color)
+            self.ui.labelColorE.setStyleSheet(f"background-color: {color}; border: 1px solid #000;")
         else:
             self.ui.label_MaxE.clear()
             self.ui.labelColorE.clear()
             self.ui.labelColorE.setStyleSheet("")
 
-    def add_service(self):
-        """Кнопка 'Добавить' - сброс формы для новой услуги"""
-        self.show_edit_panel()
-        self.reset_form()
-        self.ui.TypeServiceEdit.setFocus()
-
-    def get_selected_service_id(self):
-        """Получение ID выбранной услуги из таблицы"""
-        selected_row = self.ui.TableService.currentRow()
-        if selected_row >= 0:
-            item = self.ui.TableService.item(selected_row, 0)
-            if item:
-                return item.data(Qt.ItemDataRole.UserRole)
-        return None
-
-    def on_table_double_click(self, index):
-        """Обработка двойного клика по таблице - редактирование"""
-        service_id = self.get_selected_service_id()
-        if service_id:
-            self.edit_service(service_id)
-
-    def on_table_item_clicked(self, item):
-        """Обработка клика по элементу таблицы"""
-        service_id = self.get_selected_service_id()
-        if service_id:
-            self.edit_service(service_id)
-
-    def edit_service(self, service_id=None):
-        """Редактирование выбранной услуги"""
-        if not service_id:
-            service_id = self.get_selected_service_id()
-
-        if service_id:
-            try:
-                # Используем модель Service для загрузки данных
-                self.current_service = Service.get_by_id(service_id)
-
-                if self.current_service:
-                    # Показываем панель редактирования
-                    self.show_edit_panel()
-
-                    # Заполняем форму
-                    self.ui.TypeServiceEdit.setText(self.current_service.service_name)
-                    self.ui.PriceEdit.setText(str(self.current_service.price))
-
-                    # Устанавливаем выбранный зал
-                    if self.current_service.hall_id:
-                        index = self.ui.HallComboBox.findData(self.current_service.hall_id)
-                        if index >= 0:
-                            self.ui.HallComboBox.setCurrentIndex(index)
-
-                    # Активируем кнопку удаления
-                    self.ui.DeleteServiceBtn.setEnabled(True)
-                    self.ui.SaveServiceBtn.setText("Обновить")
-                    self.ui.AddServiceBtn.setEnabled(False)
-                else:
-                    QMessageBox.warning(self, "Ошибка", "Услуга не найдена!")
-
-            except Exception as e:
-                QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить данные услуги: {str(e)}")
-        else:
-            QMessageBox.warning(self, "Предупреждение", "Выберите услугу для редактирования")
-
     def save_service(self):
-        """Сохранение/обновление услуги через модель"""
-        try:
-            # Получаем данные из формы
-            name = self.ui.TypeServiceEdit.text().strip()
-            price_text = self.ui.PriceEdit.text().strip()
-            hall_id = self.ui.HallComboBox.currentData()
+        name = self.ui.TypeServiceEdit.text().strip()
+        price_text = self.ui.PriceEdit.text().strip()
+        hall_id = self.ui.HallComboBox.currentData()
 
-            # Валидация
-            if not name:
-                QMessageBox.warning(self, "Ошибка", "Введите название услуги!")
-                self.ui.TypeServiceEdit.setFocus()
+        if not name:
+            QMessageBox.warning(self, "Ошибка", "Введите название услуги!")
+            self.ui.TypeServiceEdit.setFocus()
+            return
+
+        if not hall_id:
+            QMessageBox.warning(self, "Ошибка", "Выберите зал!")
+            return
+
+        if not price_text:
+            QMessageBox.warning(self, "Ошибка", "Введите стоимость услуги!")
+            self.ui.PriceEdit.setFocus()
+            return
+
+        if not price_text.isdigit() or int(price_text) <= 0:
+            QMessageBox.warning(self, "Ошибка", "Стоимость должна быть положительным числом!")
+            self.ui.PriceEdit.setFocus()
+            return
+
+        price = int(price_text)
+
+        # Проверка уникальности имени
+        if self.current_service_id:
+            if service_model.name_exists(name, exclude_id=self.current_service_id):
+                QMessageBox.warning(self, "Ошибка", "Услуга с таким названием уже существует!")
                 return
-
-            if not hall_id:
-                QMessageBox.warning(self, "Ошибка", "Выберите зал!")
+            service_model.update_service(self.current_service_id, name, price, hall_id)
+            QMessageBox.information(self, "Успех", "Услуга успешно обновлена!")
+        else:
+            if service_model.name_exists(name):
+                QMessageBox.warning(self, "Ошибка", "Услуга с таким названием уже существует!")
                 return
-
-            # Валидация цены
-            if not price_text:
-                QMessageBox.warning(self, "Ошибка", "Введите стоимость услуги!")
-                self.ui.PriceEdit.setFocus()
+            new_id = service_model.create_service(name, price, hall_id)
+            if new_id is None:
+                QMessageBox.critical(self, "Ошибка", "Не удалось добавить услугу")
                 return
+            # присвоим id (если нужно)
+            self.current_service_id = new_id
+            QMessageBox.information(self, "Успех", "Услуга успешно добавлена!")
 
-            try:
-                price = int(price_text)
-                if price <= 0:
-                    raise ValueError
-            except ValueError:
-                QMessageBox.warning(self, "Ошибка", "Стоимость должна быть положительным числом!")
-                self.ui.PriceEdit.setFocus()
-                return
-
-            if self.current_service:  # Редактирование существующей услуги
-                self.current_service.service_name = name
-                self.current_service.price = price
-                self.current_service.hall_id = hall_id
-
-                if self.current_service.save():
-                    QMessageBox.information(self, "Успех", "Услуга успешно обновлена!")
-                else:
-                    QMessageBox.critical(self, "Ошибка", "Не удалось обновить услугу")
-
-            else:  # Добавление новой услуги
-                new_service = Service(
-                    service_name=name,
-                    price=price,
-                    hall_id=hall_id
-                )
-
-                if new_service.save():
-                    QMessageBox.information(self, "Успех", "Услуга успешно добавлена!")
-                else:
-                    QMessageBox.critical(self, "Ошибка", "Не удалось добавить услугу")
-
-            # Обновляем таблицу и скрываем панель
-            self.load_services()
-            self.hide_edit_panel()
-            self.reset_form()
-
-        except Exception as e:
-            QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить услугу: {str(e)}")
+        self.load_services()
+        self.hide_edit_panel()
+        self.reset_form()
 
     def delete_service(self):
-        """Удаление текущей услуги через модель"""
-        if not self.current_service:
+        if not self.current_service_id:
             QMessageBox.warning(self, "Ошибка", "Нет выбранной услуги для удаления")
             return
 
         reply = QMessageBox.question(
             self,
             "Подтверждение удаления",
-            f"Вы уверены, что хотите удалить услугу '{self.current_service.service_name}'?",
+            "Вы уверены, что хотите удалить услугу?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
 
-        if reply == QMessageBox.StandardButton.Yes:
-            try:
-                if self.current_service.delete():
-                    QMessageBox.information(self, "Успех", "Услуга удалена!")
+        if reply != QMessageBox.StandardButton.Yes:
+            return
 
-                    # Обновляем таблицу и скрываем панель
-                    self.load_services()
-                    self.hide_edit_panel()
-                    self.reset_form()
-                else:
-                    QMessageBox.critical(self, "Ошибка", "Не удалось удалить услугу")
+        success = service_model.delete_service(self.current_service_id)
+        if success:
+            QMessageBox.information(self, "Успех", "Услуга удалена!")
+            self.load_services()
+            self.hide_edit_panel()
+            self.reset_form()
+        else:
+            QMessageBox.critical(self, "Ошибка", "Не удалось удалить услугу")
 
-            except Exception as e:
-                QMessageBox.critical(self, "Ошибка", f"Не удалось удалить услугу: {str(e)}")
+    # ---------------- Navigation stubs (оставил вызовы, без обработчиков ошибок) ----------------
 
-    # Методы навигации (остаются без изменений)
     def on_services_clicked(self):
         pass
 
@@ -421,70 +284,26 @@ class ServiceForm(QMainWindow):
         pass
 
     def on_clients_clicked(self):
-        try:
-            # Импортируем локально
-            from src.views.client_window import ClientWindow
-            self.client_window = ClientWindow(self.user_id, self.user_email, self.user_role)
-            self.client_window.show()
-            self.close()
-        except ImportError as e:
-            print(f"Ошибка импорта: {e}")
-            QMessageBox.warning(self, "В разработке", "Окно услуг находится в разработке")
-        except Exception as e:
-            print(f"Ошибка открытия окна услуг: {e}")
-            QMessageBox.critical(self, "Ошибка", f"Не удалось открыть окно услуг: {str(e)}")
-
-    def open_trainers(self):
-        """Открыть окно тренеров"""
-        try:
-            from src.views.trainer_window import TrainerWindow  # <-- Импорт внутри метода
-            self.trainer_window = TrainerWindow(self.user_id, self.user_email, self.user_role)
-            self.trainer_window.show()
-            self.close()
-        except ImportError as e:
-            print(f"Ошибка импорта TrainerWindow: {e}")
-            QMessageBox.warning(self, "В разработке", "Окно тренеров находится в разработке")
-        except Exception as e:
-            print(f"Ошибка открытия окна тренеров: {e}")
-            QMessageBox.critical(self, "Ошибка", f"Не удалось открыть окно тренеров: {str(e)}")
+        from src.views.client_window import ClientWindow
+        self.client_window = ClientWindow(self.user_id, self.user_email, self.user_role)
+        self.client_window.show()
+        self.close()
 
     def on_trainers_clicked(self):
-        """Обработчик кнопки 'Тренеры'"""
-        self.open_trainers()  # Вызываем метод
-
-    def open_halls(self):
-        """Открыть окно залов"""
-        try:
-            from src.views.hall_window import HallWindow  # <-- Импорт внутри метода
-            self.hall_window = HallWindow(self.user_id, self.user_email, self.user_role)
-            self.hall_window.show()
-            self.close()
-        except ImportError as e:
-            print(f"Ошибка импорта HallWindow: {e}")
-            QMessageBox.warning(self, "В разработке", "Окно залов находится в разработке")
-        except Exception as e:
-            print(f"Ошибка открытия окна залов: {e}")
-            QMessageBox.critical(self, "Ошибка", f"Не удалось открыть окно залов: {str(e)}")
+        from src.views.trainer_window import TrainerWindow
+        self.trainer_window = TrainerWindow(self.user_id, self.user_email, self.user_role)
+        self.trainer_window.show()
+        self.close()
 
     def on_halls_clicked(self):
-        """Обработчик кнопки 'Залы'"""
-        self.open_halls()  # Вызываем метод
-
-    def open_schedule(self):
-        """Открыть окно расписания"""
-        try:
-            from src.views.schedule_window import ScheduleWindow  # <-- Импорт внутри метода
-            self.schedule_window = ScheduleWindow(self.user_id, self.user_email, self.user_role)
-            self.schedule_window.show()
-            self.close()
-        except ImportError as e:
-            print(f"Ошибка импорта ScheduleWindow: {e}")
-            QMessageBox.warning(self, "В разработке", "Окно расписания находится в разработке")
-        except Exception as e:
-            print(f"Ошибка открытия окна расписания: {e}")
-            QMessageBox.critical(self, "Ошибка", f"Не удалось открыть окно расписания: {str(e)}")
+        from src.views.hall_window import HallWindow
+        self.hall_window = HallWindow(self.user_id, self.user_email, self.user_role)
+        self.hall_window.show()
+        self.close()
 
     def on_schedule_clicked(self):
-        """Обработчик кнопки 'Расписание'"""
-        self.open_schedule()  # Вызываем метод
+        from src.views.schedule_window import ScheduleWindow
+        self.schedule_window = ScheduleWindow(self.user_id, self.user_email, self.user_role)
+        self.schedule_window.show()
+        self.close()
 
