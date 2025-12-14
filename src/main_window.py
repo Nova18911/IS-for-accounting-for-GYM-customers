@@ -1,8 +1,11 @@
-from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-                             QLabel, QPushButton, QStackedWidget, QFrame)
-from PyQt6.QtCore import Qt, QTimer
-from src.database.connector import db
-
+# src/main_window.py
+from PyQt6.QtWidgets import QMainWindow
+from src.ui.main_window import Ui_MainWindow
+from src.views.client_page import ClientPageController
+from src.views.hall_page import HallPageController
+from src.views.service_page import ServicePageController
+from src.views.trainer_page import TrainerPageController
+from src.views.schedule_page import SchedulePageController
 
 class MainWindow(QMainWindow):
     def __init__(self, user_id, user_email, user_role):
@@ -12,24 +15,47 @@ class MainWindow(QMainWindow):
         self.user_email = user_email
         self.user_role = user_role
 
-        # Устанавливаем заголовок
-        self.setWindowTitle(f"Фитнес-клуб - {user_email} ({user_role})")
-        self.setGeometry(100, 100, 1200, 700)
+        self.ui = Ui_MainWindow()
+        self.ui.setupUi(self)
 
-        # Делаем окно прозрачным и без рамки (чтобы не было видно)
-        self.setWindowOpacity(0)  # Полностью прозрачное
-        self.setWindowFlag(Qt.WindowType.FramelessWindowHint)  # Без рамки
+        # Заголовок окна
+        self.setWindowTitle(f"Фитнес-клуб — {user_email} ({user_role})")
 
-        # Таймер для автоматического закрытия и открытия service_window
-        QTimer.singleShot(50, self.switch_to_service_window)
+        # Создаём контроллеры страниц
+        self.hall_controller = HallPageController(self.ui)
+        self.service_controller = ServicePageController(self.ui)
+        self.trainer_controller = TrainerPageController(self.ui)
+        self.schedule_controller = SchedulePageController(self.ui)
+        self.client_controller = ClientPageController(self.ui)
 
-    def switch_to_service_window(self):
-        """Закрываем это окно и открываем service_window"""
-        from src.views.service_window import ServiceForm
+        # Страница по умолчанию — услуги
+        self.ui.stackedWidget.setCurrentWidget(self.ui.ServicePage)
 
-        # Создаем и показываем окно услуг
-        self.service_window = ServiceForm()
-        self.service_window.show()
+        self._connect_buttons()
 
-        # Закрываем это окно
-        self.close()
+    def _connect_buttons(self):
+        self.ui.ServiceButton.clicked.connect(
+            lambda: self.ui.stackedWidget.setCurrentWidget(self.ui.ServicePage)
+        )
+
+        self.ui.ScheduleButton.clicked.connect(
+            lambda: self.ui.stackedWidget.setCurrentWidget(self.ui.SchedulePage)
+        )
+
+        self.ui.ClientsButton.clicked.connect(
+            lambda: self.ui.stackedWidget.setCurrentWidget(self.ui.ClientPage)
+        )
+
+        self.ui.TrainerButton.clicked.connect(
+            lambda: self.ui.stackedWidget.setCurrentWidget(self.ui.TrainerPage)
+        )
+
+        self.ui.HallButton.clicked.connect(
+            lambda: self.ui.stackedWidget.setCurrentWidget(self.ui.HallPage)
+        )
+
+        self.ui.ReportButton.clicked.connect(
+            lambda: self.ui.stackedWidget.setCurrentWidget(self.ui.ReportPage)
+        )
+
+        self.ui.ExitButton.clicked.connect(self.close)

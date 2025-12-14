@@ -360,7 +360,7 @@
     </rect>
    </property>
    <property name="rowCount">
-    <number>12</number>
+    <number>11</number>
    </property>
    <property name="columnCount">
     <number>7</number>
@@ -376,22 +376,17 @@
    </attribute>
    <row>
     <property name="text">
-     <string/>
+     <string>07:00</string>
     </property>
    </row>
    <row>
     <property name="text">
-     <string>7:00</string>
+     <string>08:00</string>
     </property>
    </row>
    <row>
     <property name="text">
-     <string>8:00</string>
-    </property>
-   </row>
-   <row>
-    <property name="text">
-     <string>9:00</string>
+     <string>09:00</string>
     </property>
    </row>
    <row>
@@ -504,6 +499,63 @@
    </property>
    <property name="text">
     <string>Удалить</string>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="LeftButton_2">
+   <property name="geometry">
+    <rect>
+     <x>50</x>
+     <y>160</y>
+     <width>41</width>
+     <height>41</height>
+    </rect>
+   </property>
+   <property name="font">
+    <font>
+     <pointsize>20</pointsize>
+    </font>
+   </property>
+   <property name="text">
+    <string>⇦</string>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="RightButton_2">
+   <property name="geometry">
+    <rect>
+     <x>310</x>
+     <y>160</y>
+     <width>41</width>
+     <height>41</height>
+    </rect>
+   </property>
+   <property name="font">
+    <font>
+     <pointsize>20</pointsize>
+    </font>
+   </property>
+   <property name="text">
+    <string>⇨</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="DateL_3">
+   <property name="geometry">
+    <rect>
+     <x>110</x>
+     <y>160</y>
+     <width>191</width>
+     <height>41</height>
+    </rect>
+   </property>
+   <property name="font">
+    <font>
+     <pointsize>14</pointsize>
+    </font>
+   </property>
+   <property name="layoutDirection">
+    <enum>Qt::RightToLeft</enum>
+   </property>
+   <property name="text">
+    <string/>
    </property>
   </widget>
  </widget>

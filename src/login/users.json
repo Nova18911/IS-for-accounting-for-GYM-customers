@@ -1,0 +1,16 @@
+[
+  {
+    "user_id": 1,
+    "email": "admin@fitness.ru",
+    "password": "admin123",
+    "role": "admin",
+    "is_active": true
+  },
+  {
+    "user_id": 2,
+    "email": "reception@fitness.ru",
+    "password": "reception123",
+    "role": "reception",
+    "is_active": true
+  }
+]

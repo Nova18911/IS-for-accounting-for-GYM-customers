@@ -1,6 +1,5 @@
-import sys
 from PyQt6.QtWidgets import QApplication
-from src.views.login_window import LoginWindow
+from src.login.login_window import LoginWindow
 from src.main_window import MainWindow
 # main.py — добавь в самый верх
 import faulthandler, sys, traceback, os, signal, logging

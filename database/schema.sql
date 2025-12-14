@@ -38,8 +38,8 @@ CREATE TABLE trainers (
     first_name VARCHAR(50) NOT NULL,
     middle_name VARCHAR(50),
     photo LONGBLOB,
-    phone VARCHAR(20),
-    email VARCHAR(50),
+    phone VARCHAR(20) UNIQUE,
+    email VARCHAR(50) UNIQUE,
     trainer_type_id INT NOT NULL,
     FOREIGN KEY (trainer_type_id) REFERENCES trainer_types(trainer_type_id)
 );
@@ -55,7 +55,7 @@ CREATE TABLE subscription_prices (
 -- Таблица абонементов
 CREATE TABLE subscriptions (
     subscription_id INT PRIMARY KEY AUTO_INCREMENT,
-    start_date DATE NOT NULL,
+    start_date DATE NOT NULL DEFAULT CURRENT_DATE,
     subscription_price_id INT NOT NULL,
     FOREIGN KEY (subscription_price_id) REFERENCES subscription_prices(subscription_price_id)
 );
@@ -66,8 +66,8 @@ CREATE TABLE clients (
     last_name VARCHAR(50) NOT NULL,
     first_name VARCHAR(50) NOT NULL,
     middle_name VARCHAR(50),
-    phone VARCHAR(20),
-    email VARCHAR(100),
+    phone VARCHAR(20) UNIQUE,
+    email VARCHAR(100) UNIQUE,
     photo LONGBLOB,
     subscription_id INT UNIQUE,
     FOREIGN KEY (subscription_id) REFERENCES subscriptions(subscription_id)
@@ -118,18 +118,6 @@ CREATE TABLE group_attendances (
 -- Включаем проверку внешних ключей обратно
 SET FOREIGN_KEY_CHECKS = 1;
 
-CREATE TABLE users (
-    user_id INT PRIMARY KEY AUTO_INCREMENT,
-    email VARCHAR(100) UNIQUE NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
-    role ENUM('admin', 'reception', 'trainer') DEFAULT 'reception',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    is_active BOOLEAN DEFAULT TRUE
-);
-
-INSERT INTO users (email, password_hash, role) VALUES
-('admin@fitness.ru', SHA2('admin123', 256), 'admin'),
-('reception@fitness.ru', SHA2('reception123', 256), 'reception');
 
 -- Заполнение таблицы типов тренеров
 INSERT INTO trainer_types (trainer_type_name, rate) VALUES
@@ -139,7 +127,7 @@ INSERT INTO trainer_types (trainer_type_name, rate) VALUES
 
 -- Заполнение таблицы стоимости абонементов
 INSERT INTO subscription_prices (duration, price) VALUES
-('1 месяц', 3000),    -- 3000 руб за месяц
-('3 месяца', 8000),   -- 8000 руб за 3 месяца (скидка)
-('полгода', 15000),   -- 15000 руб за полгода (скидка)
-('год', 28000);       -- 28000 руб за год (скидка)
+('1 месяц', 3000),
+('3 месяца', 8000),
+('полгода', 15000),
+('год', 28000);

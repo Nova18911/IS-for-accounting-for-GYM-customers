@@ -1,17 +1,21 @@
 from src.database.connector import db
 
 
-def trainer_get_all():
-    """Возвращает всех тренеров как list[dict]."""
-    rows = db.execute_query("""
-        SELECT trainer_id, last_name, first_name, middle_name,
-               phone, email, trainer_type_id, photo
-        FROM trainers
-        ORDER BY last_name, first_name
-    """)
-    if not rows:
-        return []
-    return [
+def trainer_get_all(only_personal=False):
+    """
+    Возвращает всех тренеров как list[dict].
+    Если only_personal=True — возвращает только тех тренеров,
+    которые могут проводить персональные тренировки (Персональный + Общий).
+    """
+    query = """
+        SELECT t.trainer_id, t.last_name, t.first_name, t.middle_name,
+               t.phone, t.email, t.trainer_type_id, t.photo, tt.trainer_type_name
+        FROM trainers t
+        JOIN trainer_types tt ON t.trainer_type_id = tt.trainer_type_id
+        ORDER BY t.last_name, t.first_name
+    """
+    rows = db.execute_query(query)
+    trainers = [
         {
             "trainer_id": r[0],
             "last_name": r[1],
@@ -20,10 +24,20 @@ def trainer_get_all():
             "phone": r[4],
             "email": r[5],
             "trainer_type_id": r[6],
-            "photo": r[7]
+            "photo": r[7],
+            "trainer_type_name": r[8]
         }
-        for r in rows
+        for r in rows or []
     ]
+
+    if only_personal:
+        trainers = [
+            t for t in trainers
+            if t['trainer_type_name'] in ('Персональный тренер', 'Общий тренер')
+        ]
+
+    return trainers
+
 
 
 def trainer_get_by_id(trainer_id: int):
