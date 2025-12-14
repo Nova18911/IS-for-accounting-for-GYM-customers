@@ -818,7 +818,7 @@
        <bool>true</bool>
       </attribute>
       <attribute name="verticalHeaderVisible">
-       <bool>true</bool>
+       <bool>false</bool>
       </attribute>
       <row>
        <property name="text">
@@ -2337,6 +2337,16 @@
       </property>
       <property name="text">
        <string>Отчет по тренерам</string>
+      </property>
+     </widget>
+     <widget class="QTableWidget" name="ReportTable">
+      <property name="geometry">
+       <rect>
+        <x>490</x>
+        <y>30</y>
+        <width>561</width>
+        <height>621</height>
+       </rect>
       </property>
      </widget>
     </widget>

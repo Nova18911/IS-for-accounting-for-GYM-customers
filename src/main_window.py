@@ -6,6 +6,7 @@ from src.views.hall_page import HallPageController
 from src.views.service_page import ServicePageController
 from src.views.trainer_page import TrainerPageController
 from src.views.schedule_page import SchedulePageController
+from src.views.report_page import ReportsPageController
 
 class MainWindow(QMainWindow):
     def __init__(self, user_id, user_email, user_role):
@@ -27,6 +28,7 @@ class MainWindow(QMainWindow):
         self.trainer_controller = TrainerPageController(self.ui)
         self.schedule_controller = SchedulePageController(self.ui)
         self.client_controller = ClientPageController(self.ui)
+        self.report_controller = ReportsPageController(self.ui)
 
         # Страница по умолчанию — услуги
         self.ui.stackedWidget.setCurrentWidget(self.ui.ServicePage)
