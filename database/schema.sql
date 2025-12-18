@@ -1,9 +1,7 @@
 USE 2025_mysql_art;
 
--- Временно отключаем проверку внешних ключей
 SET FOREIGN_KEY_CHECKS = 0;
 
--- Удаляем таблицы если они уже существуют (в обратном порядке зависимостей)
 DROP TABLE IF EXISTS group_attendances;
 DROP TABLE IF EXISTS personal_trainings;
 DROP TABLE IF EXISTS group_trainings;
@@ -16,7 +14,6 @@ DROP TABLE IF EXISTS trainers;
 DROP TABLE IF EXISTS trainer_types;
 DROP TABLE IF EXISTS users;
 
--- 1. Создаем таблицы в правильном порядке (от независимых к зависимым)
 
 -- Таблица залов
 CREATE TABLE halls (
@@ -32,6 +29,7 @@ CREATE TABLE trainer_types (
     rate INT
 );
 
+-- Таблица тренеров
 CREATE TABLE trainers (
     trainer_id INT PRIMARY KEY AUTO_INCREMENT,
     last_name VARCHAR(50) NOT NULL,

@@ -1,6 +1,5 @@
 # src/views/reports_page.py
-from PyQt6.QtWidgets import QWidget, QTableWidgetItem, QMessageBox
-from datetime import date, datetime
+from PyQt6.QtWidgets import QTableWidgetItem
 from src.database.connector import db
 from datetime import date
 from src.models.client import client_get_all
@@ -251,20 +250,18 @@ class ReportsPageController:
 
         trainers = trainer_get_all()
         self.clear_table()
-        self.ui.ReportTable.setColumnCount(5)
+        self.ui.ReportTable.setColumnCount(4)
         self.ui.ReportTable.setHorizontalHeaderLabels([
-            "Тренер", "Выручка", "Кол-во тренировок", "Кол-во клиентов", "Ушедшие клиенты"
+            "Тренер", "Кол-во тренировок", "Кол-во клиентов", "Ушедшие клиенты"
         ])
         self.ui.ReportTable.setRowCount(len(trainers))
 
         for row, tr in enumerate(trainers):
-            revenue = self.get_trainer_revenue(tr["trainer_id"], month, year)
             trainings_count = self.get_personal_trainings_count(tr["trainer_id"], month, year) + self.get_group_trainings_count(tr["trainer_id"], month, year)
             clients_count = self.get_clients_trained(tr["trainer_id"], month, year)
             churned_count = self.get_churned_clients(tr["trainer_id"], month, year)
 
             self.ui.ReportTable.setItem(row, 0, QTableWidgetItem(f"{tr['last_name']} {tr['first_name']}"))
-            self.ui.ReportTable.setItem(row, 1, QTableWidgetItem(str(revenue)))
             self.ui.ReportTable.setItem(row, 2, QTableWidgetItem(str(trainings_count)))
             self.ui.ReportTable.setItem(row, 3, QTableWidgetItem(str(clients_count)))
             self.ui.ReportTable.setItem(row, 4, QTableWidgetItem(str(churned_count)))

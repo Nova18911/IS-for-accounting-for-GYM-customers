@@ -55,14 +55,14 @@ class TrainerPageController:
         self.current_trainer: Optional[Dict] = None
         self.current_photo_data: Optional[bytes] = None
 
-        try:
-            self._setup_interface()
-            self._connect_signals()
-            self.load_trainer_types()
-            self.load_trainers()
-            self.reset_form()
-        except Exception:
-            logger.exception("Initialization of TrainerPageController crashed")
+
+        self._setup_interface()
+        self._connect_signals()
+        self.load_trainer_types()
+        self.load_trainers()
+        self.reset_form()
+
+        self.ui.widget_trainer.setVisible(False)
 
     # -----------------------
     # Интерфейс таблицы
@@ -96,7 +96,7 @@ class TrainerPageController:
         self.ui.SearchPhoneEdit_2.textChanged.connect(self.on_search_phone_changed)
 
         try:
-            self.ui.AddTrainerBtn.clicked.connect(self.reset_form)
+            self.ui.AddTrainerBtn.clicked.connect(self.add_new_trainer)
         except AttributeError:
             logger.warning("AddTrainerBtn not found, reset form functionality disabled/needs different connection")
 
@@ -223,6 +223,11 @@ class TrainerPageController:
     # -----------------------
     # CRUD / редактирование
     # -----------------------
+
+    def add_new_trainer(self):
+        self.reset_form()
+        self.ui.widget_trainer.setVisible(True)
+
     def reset_form(self):
         self.current_trainer = None
         self.current_photo_data = None
@@ -271,6 +276,7 @@ class TrainerPageController:
 
     def edit_trainer(self, trainer_id=None):
         try:
+            self.ui.widget_trainer.setVisible(True)
             if not trainer_id:
                 trainer_id = self.get_selected_trainer_id()
             if not trainer_id:
@@ -281,6 +287,8 @@ class TrainerPageController:
             if not tr:
                 QMessageBox.warning(self.ui.centralwidget, "Ошибка", "Тренер не найден")
                 return
+
+
 
             self.current_trainer = tr
             self.ui.LastNameTrainerEdit.setText(str(tr.get("last_name", "")))
@@ -342,6 +350,7 @@ class TrainerPageController:
 
             self.load_trainers()
             self.reset_form()
+            self.ui.widget_trainer.setVisible(False)
         except Exception as e:
             logger.exception("save_trainer failed: %s", e)
             QMessageBox.critical(self.ui.centralwidget, "Ошибка", f"Не удалось сохранить тренера: {e}")
@@ -363,6 +372,7 @@ class TrainerPageController:
                 QMessageBox.information(self.ui.centralwidget, "Успех", "Тренер удален!")
                 self.load_trainers()
                 self.reset_form()
+                self.ui.widget_trainer.setVisible(False)
             else:
                 QMessageBox.critical(self.ui.centralwidget, "Ошибка", "Не удалось удалить тренера")
         except Exception as e:

@@ -8,9 +8,10 @@ class HallPageController:
 
     def __init__(self, ui):
         self.ui = ui
-        self.current_hall_id = None  # хранит hall_id выбранного зала
+        self.current_hall_id = None
         self.setup_interface()
         self.load_halls()
+        self.ui.widget_hall.setVisible(False)
 
     def setup_interface(self):
         table = self.ui.HallTableWidget
@@ -21,6 +22,7 @@ class HallPageController:
         table.itemClicked.connect(self.on_table_item_clicked)
 
         # Кнопки виджета
+        self.ui.AddHallBtn.clicked.connect(self.add_new_hall)
         self.ui.Save_hallBtn.clicked.connect(self.on_save_clicked)
         self.ui.Delete_hallBtn.clicked.connect(self.on_delete_clicked)
 
@@ -55,7 +57,12 @@ class HallPageController:
         self.current_hall_id = hall.hall_id
         self.ui.HallEdit.setText(hall.hall_name)
         self.ui.CapacityEdit.setText(str(hall.capacity))
+        self.ui.widget_hall.setVisible(True)
         self.ui.Delete_hallBtn.setEnabled(True)
+
+    def add_new_hall(self):
+        self.clear_form()
+        self.ui.widget_hall.setVisible(True)
 
     def on_save_clicked(self):
         """Создать новый зал или обновить существующий"""
@@ -94,6 +101,7 @@ class HallPageController:
                 return
 
         self.load_halls()
+        self.ui.widget_hall.setVisible(False)
 
     def on_delete_clicked(self):
         """Удаление выбранного зала"""
@@ -108,6 +116,7 @@ class HallPageController:
         hall = Hall.get_by_id(self.current_hall_id)
         if hall and hall.delete():
             self.load_halls()
+            self.ui.widget_hall.setVisible(False)
         else:
             QMessageBox.critical(None, "Ошибка", "Не удалось удалить зал")
 

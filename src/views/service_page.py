@@ -21,6 +21,8 @@ class ServicePageController:
         self.load_halls()
         self.load_services()
 
+        self.ui.widget_service.setVisible(False)
+
     # ---------------- UI / INIT ----------------
 
     def setup_interface(self):
@@ -31,8 +33,9 @@ class ServicePageController:
         table.setColumnWidth(3, 120)
         table.setSelectionBehavior(table.SelectionBehavior.SelectRows)
         table.setEditTriggers(table.EditTrigger.NoEditTriggers)
-        table.itemClicked.connect(lambda _: self.edit_selected_service())
+        table.itemDoubleClicked.connect(lambda _: self.edit_selected_service())
 
+        self.ui.AddServiceBtn.clicked.connect(self.add_new_service)
         self.ui.SaveServiceBtn.clicked.connect(self.save_service)
         self.ui.DeleteServiceBtn.clicked.connect(self.delete_service)
         self.ui.HallComboBox.currentIndexChanged.connect(self.on_hall_changed)
@@ -119,6 +122,8 @@ class ServicePageController:
         if not svc_id:
             return
 
+        self.ui.widget_service.setVisible(True)
+
         svc = service_model.get_service_by_id(svc_id)
         if not svc:
             QMessageBox.warning(None, "Ошибка", "Услуга не найдена")
@@ -147,6 +152,10 @@ class ServicePageController:
         self.ui.label_MaxE.clear()
         self.ui.labelColorE.clear()
         self.ui.labelColorE.setStyleSheet("")
+
+    def add_new_service(self):
+        self.reset_form()
+        self.ui.widget_service.setVisible(True)
 
     def save_service(self):
         name = self.ui.TypeServiceEdit.text().strip()
@@ -182,6 +191,7 @@ class ServicePageController:
                 return
 
         self.load_services()
+        self.ui.widget_service.setVisible(False)
 
     def delete_service(self):
         if not self.current_service_id:
@@ -197,3 +207,5 @@ class ServicePageController:
             self.load_services()
         else:
             QMessageBox.critical(None, "Ошибка", "Не удалось удалить услугу")
+
+        self.ui.widget_service.setVisible(False)

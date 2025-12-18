@@ -1,4 +1,3 @@
-# src/main_window.py
 from PyQt6.QtWidgets import QMainWindow
 from src.ui.main_window import Ui_MainWindow
 from src.views.client_page import ClientPageController

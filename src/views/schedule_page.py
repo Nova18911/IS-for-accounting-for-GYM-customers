@@ -1,5 +1,3 @@
-# src/views/schedule_page.py
-from datetime import datetime, timedelta, date
 from PyQt6.QtWidgets import (
     QTableWidgetItem, QMessageBox, QDialog, QVBoxLayout, QComboBox, QDialogButtonBox, QLabel
 )
@@ -10,6 +8,8 @@ import src.models.trainers as trainer_model
 import src.models.trainer_types as trainer_types_model
 from src.models.halls import Hall
 from datetime import datetime, timedelta, date, time
+
+from src.views.schedule_cell_dialog import ScheduleCellDialog
 
 
 class SchedulePageController:
@@ -131,22 +131,38 @@ class SchedulePageController:
         week = self.get_week_dates()
         start_date, end_date = week[0], week[-1]
         trainings = GroupTraining.get_all_in_week(start_date, end_date)
+
+        # Словарь для группировки тренировок по (row, col)
+        cells_data = {}
+
         for tr in trainings:
-            if not tr.training_date:
-                continue
             day_idx = (tr.training_date - start_date).days
-            if day_idx < 0 or day_idx > 6:
-                continue
+            if day_idx < 0 or day_idx > 6: continue
+
             time_idx = self.get_time_index(tr.start_time)
-            if time_idx < 0:
-                continue
-            text = f"{tr.service_name or 'Не указано'}\n({tr.trainer_name or 'Тренер не указан'})"
+            if time_idx < 0: continue
+
+            key = (time_idx, day_idx)
+            if key not in cells_data:
+                cells_data[key] = []
+            cells_data[key].append(tr)
+
+        for (r, c), tr_list in cells_data.items():
+            count = len(tr_list)
+            if count == 1:
+                tr = tr_list[0]
+                text = f"{tr.service_name}\n({tr.trainer_name})"
+                color = self.get_hall_color(tr.hall_id)
+            else:
+                # Если тренировок несколько, пишем количество
+                text = f"Занято слотов: {count}\n(Кликните для выбора)"
+                color = "#E0E0E0"  # Нейтральный цвет для группы
+
             new_item = QTableWidgetItem(text)
-            new_item.setFlags(new_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            if tr.hall_id:
-                new_item.setBackground(self._qcolor_from_hex(self.get_hall_color(tr.hall_id)))
-            new_item.setToolTip(f"{tr.service_name or ''} — {tr.trainer_name or ''}")
-            self.ui.ScheduleTable.setItem(time_idx, day_idx, new_item)
+            new_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            new_item.setBackground(self._qcolor_from_hex(color))
+            new_item.setToolTip("\n---\n".join([f"{t.service_name} ({t.hall_name})" for t in tr_list]))
+            self.ui.ScheduleTable.setItem(r, c, new_item)
 
     def get_hall_color(self, hall_id):
         return self.hall_colors.get(hall_id, "#FFFFFF")
@@ -163,36 +179,19 @@ class SchedulePageController:
         selected_date = week[column]
         time_slot = self.time_slots[row]
 
-        trainings = GroupTraining.get_all_in_week(selected_date, selected_date)
-        trainings_in_slot = [t for t in trainings if (t.start_time.strftime("%H:%M")
-                                 if hasattr(t.start_time, 'strftime') else str(t.start_time)[:5]) == time_slot]
+        dlg = ScheduleCellDialog(
+            self.ui.centralwidget,
+            selected_date,
+            time_slot
+        )
 
-        dlg = QDialog()
-        dlg.setWindowTitle(f"{selected_date.strftime('%d.%m.%Y')} — {time_slot}")
-        dlg.setFixedSize(380, 220)
-        v = QVBoxLayout(dlg)
-        v.addWidget(QLabel("Выберите тренировку или создайте новую:"))
-        combo = QComboBox()
-        combo.addItem("Создать новую тренировку", None)
-        for t in trainings_in_slot:
-            combo.addItem(f"{t.service_name or 'Не указано'} - {t.trainer_name or 'Тренер'}", t.group_training_id)
-        v.addWidget(combo)
-        btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        v.addWidget(btns)
-
-        def on_accept():
-            choice = combo.currentData()
-            if choice:
-                training = GroupTraining.get_by_id(choice)
-                if training:
-                    self.edit_training(training)
+        if dlg.exec():
+            if dlg.selected_training:
+                self.edit_training(dlg.selected_training)
             else:
                 self.create_new_training(row, column)
-            dlg.accept()
 
-        btns.accepted.connect(on_accept)
-        btns.rejected.connect(dlg.reject)
-        dlg.exec()
+
 
     # ---------------------------
     # Form panel
@@ -263,66 +262,114 @@ class SchedulePageController:
     # Save / Delete
     # ---------------------------
     def save_training(self):
-        day, month, year = self.ui.DayEdit.text(), self.ui.MonthEdit.text(), self.ui.YearEdit.text()
-        time_str = self.ui.TimeEdit.text()
+        """
+        Сохраняет новую или обновляет существующую групповую тренировку
+        с проверкой пересечений по тренеру, залу и типу услуги.
+        """
+        # 1. Сбор данных из полей ввода
+        day = self.ui.DayEdit.text().strip()
+        month = self.ui.MonthEdit.text().strip()
+        year = self.ui.YearEdit.text().strip()
+        time_str = self.ui.TimeEdit.text().strip()
         service_id = self.ui.ServiceComboBox.currentData()
         trainer_id = self.ui.TrainerComboBox.currentData()
 
-        if not (day and month and year):
-            QMessageBox.warning(self.ui, "Ошибка", "Введите полную дату!")
-            return
-        if not time_str:
-            QMessageBox.warning(self.ui, "Ошибка", "Введите время начала!")
-            return
-        if not service_id:
-            QMessageBox.warning(self.ui, "Ошибка", "Выберите тренировку!")
-            return
-        if not trainer_id:
-            QMessageBox.warning(self.ui, "Ошибка", "Выберите тренера!")
+        # 2. Базовая проверка на заполненность
+        if not (day and month and year and time_str):
+            QMessageBox.warning(self.ui.centralwidget, "Ошибка", "Введите дату и время!")
             return
 
+        if not service_id:
+            QMessageBox.warning(self.ui.centralwidget, "Ошибка", "Выберите тип тренировки!")
+            return
+
+        if not trainer_id:
+            QMessageBox.warning(self.ui.centralwidget, "Ошибка", "Выберите тренера!")
+            return
+
+        # 3. Преобразование типов и валидация формата
         try:
             training_date = date(int(year), int(month), int(day))
+
+            # Приведение времени к формату HH:MM:SS для парсинга
+            if len(time_str) == 5:
+                time_str_full = time_str + ":00"
+            else:
+                time_str_full = time_str
+            start_time = datetime.strptime(time_str_full, "%H:%M:%S").time()
         except ValueError:
-            QMessageBox.warning(self.ui, "Ошибка", "Некорректная дата!")
+            QMessageBox.warning(self.ui.centralwidget, "Ошибка", "Некорректный формат даты или времени!")
             return
 
-        # Приводим время к объекту time
-        if len(time_str) == 5:
-            time_str_full = time_str + ":00"
-        else:
-            time_str_full = time_str
-        start_time = datetime.strptime(time_str_full, "%H:%M:%S").time()
-
+        # ID текущей тренировки (если редактируем), чтобы проверка не натыкалась на саму себя
         exclude_id = self.current_training.group_training_id if self.current_training else None
 
-        # Проверка доступности тренера
-        if not GroupTraining.check_trainer_availability(trainer_id, training_date, start_time, exclude_id):
-            QMessageBox.warning(self.ui, "Ошибка", "Этот тренер уже занят в выбранное время!")
+        # 4. Проверки бизнес-логики (Обработчик ошибок по вашему запросу)
+
+        # Проверяем занятость тренера
+        trainer_busy = not GroupTraining.check_trainer_availability(
+            trainer_id, training_date, start_time, exclude_id
+        )
+
+        # Проверяем наличие такой же услуги (тренировки) в это время
+        service_exists = GroupTraining.check_service_existence(
+            service_id, training_date, start_time, exclude_id
+        )
+
+        # Вывод специфичных сообщений об ошибках
+        if trainer_busy and service_exists:
+            QMessageBox.warning(self.ui.centralwidget, "Ошибка",
+                                "Такая тренировка уже существует (совпадает и тренер, и тип занятия)!")
+            return
+        elif trainer_busy:
+            QMessageBox.warning(self.ui.centralwidget, "Ошибка",
+                                "Тренер уже занят в это время!")
+            return
+        elif service_exists:
+            QMessageBox.warning(self.ui.centralwidget, "Ошибка",
+                                "Вы уже добавляли в это время эту тренировку!")
             return
 
-        # Проверка доступности зала
-        service = Service.get_by_id(service_id)
-        if service and service.hall_id:
-            if not GroupTraining.check_hall_availability(service.hall_id, training_date, start_time, exclude_id):
-                QMessageBox.warning(self.ui, "Ошибка", "Зал занят в выбранное время!")
+        # 5. Проверка доступности зала
+        service_obj = Service.get_by_id(service_id)
+        if service_obj and service_obj.hall_id:
+            hall_available = GroupTraining.check_hall_availability(
+                service_obj.hall_id, training_date, start_time, exclude_id
+            )
+            if not hall_available:
+                QMessageBox.warning(self.ui.centralwidget, "Ошибка",
+                                    "Зал, в котором проводится эта тренировка, уже занят!")
                 return
 
-        # Сохранение
-        if self.current_training:
-            self.current_training.training_date = training_date
-            self.current_training.start_time = start_time
-            self.current_training.service_id = service_id
-            self.current_training.trainer_id = trainer_id
-            ok = self.current_training.save()
-        else:
-            new = GroupTraining(training_date=training_date, start_time=start_time,
-                                trainer_id=trainer_id, service_id=service_id)
-            ok = new.save()
+        # 6. Сохранение в базу данных
+        try:
+            if self.current_training:
+                # Режим редактирования
+                self.current_training.training_date = training_date
+                self.current_training.start_time = start_time
+                self.current_training.service_id = service_id
+                self.current_training.trainer_id = trainer_id
+                success = self.current_training.save()
+            else:
+                # Режим создания новой записи
+                new_tr = GroupTraining(
+                    training_date=training_date,
+                    start_time=start_time,
+                    trainer_id=trainer_id,
+                    service_id=service_id
+                )
+                success = new_tr.save()
 
+            if success:
+                QMessageBox.information(self.ui.centralwidget, "Успех", "Расписание успешно обновлено")
+                self.load_schedule()  # Перерисовываем таблицу
+                self.reset_form()  # Очищаем поля
+                self.ui.widget.setVisible(False)  # Скрываем панель редактирования
+            else:
+                QMessageBox.critical(self.ui.centralwidget, "Ошибка", "Не удалось сохранить данные в БД")
 
-        self.load_schedule()
-        self.reset_form()
+        except Exception as e:
+            QMessageBox.critical(self.ui.centralwidget, "Критическая ошибка", f"Произошел сбой при сохранении: {e}")
 
     def delete_training(self):
         if not self.current_training:

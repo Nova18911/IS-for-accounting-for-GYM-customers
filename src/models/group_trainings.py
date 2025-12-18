@@ -1,6 +1,5 @@
 # src/models/group_trainings.py
 from src.database.connector import db
-from datetime import datetime, date, time
 
 class GroupTraining:
     """Упрощённая модель групповой тренировки."""
@@ -223,3 +222,26 @@ class GroupTraining:
         gt.hall_name = data.get('hall_name')
         gt.capacity = data.get('capacity')
         return gt
+
+    @staticmethod
+    def check_service_existence(service_id, training_date, start_time, exclude_id=None):
+        """Возвращает True, если такая услуга (тип тренировки) уже запланирована в это время"""
+        try:
+            if exclude_id:
+                query = """
+                    SELECT COUNT(*) FROM group_trainings
+                    WHERE service_id=%s AND training_date=%s AND start_time=%s AND group_training_id != %s
+                    """
+                params = (service_id, training_date, start_time, exclude_id)
+            else:
+                query = """
+                    SELECT COUNT(*) FROM group_trainings
+                    WHERE service_id=%s AND training_date=%s AND start_time=%s
+                    """
+                params = (service_id, training_date, start_time)
+
+            rows = db.execute_query(query, params)
+            return rows[0][0] > 0 if rows else False
+        except Exception as e:
+            print("Ошибка check_service_existence:", e)
+            return False

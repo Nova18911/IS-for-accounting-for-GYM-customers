@@ -51,6 +51,7 @@ class ClientPageController:
 
         self.setup_interface()
         self.load_clients()
+        self.ui.ClientTabWidget.setVisible(False)
 
     # ---------------- interface ----------------
     def setup_interface(self):
@@ -64,6 +65,7 @@ class ClientPageController:
         self.ui.SearchPhoneEdit.textChanged.connect(self.search_clients)
 
         # Клиент
+        self.ui.AddClientBtn.clicked.connect(self.add_new_client)
         self.ui.Save_clientBtn_3.clicked.connect(self.save_client)
         self.ui.Delete_clientBtn_3.clicked.connect(self.delete_client)
         self.ui.Photo_3.mousePressEvent = self.select_photo
@@ -94,24 +96,31 @@ class ClientPageController:
         table.setRowCount(0)
 
         clients = clients or client_get_all()
+
         for row, client in enumerate(clients):
             table.insertRow(row)
+
             table.setItem(row, 0, QTableWidgetItem(client['last_name']))
             table.item(row, 0).setData(Qt.ItemDataRole.UserRole, client['client_id'])
             table.setItem(row, 1, QTableWidgetItem(client['first_name']))
             table.setItem(row, 2, QTableWidgetItem(client.get('middle_name') or ""))
             table.setItem(row, 3, QTableWidgetItem(client.get('phone') or ""))
+
+            # -------- Абонемент --------
             sub_id = client.get('subscription_id')
+
             if sub_id:
                 sub = subscription_get_by_id(sub_id)
-                if sub:
-                    # используем card_number, если есть, иначе id
-                    card_number = sub.get('card_number', sub_id)
-                    table.setItem(row, 4, QTableWidgetItem(str(card_number)))
-                else:
-                    table.setItem(row, 4, QTableWidgetItem(""))
+                card_number = sub.get('card_number', sub_id) if sub else ""
+                table.setItem(row, 4, QTableWidgetItem(str(card_number)))
             else:
                 table.setItem(row, 4, QTableWidgetItem(""))
+
+            # -------- Актив --------
+            is_active = self.is_subscription_active(sub_id)
+            active_item = QTableWidgetItem("✓" if is_active else "-")
+            active_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            table.setItem(row, 5, active_item)
 
         self.clear_client_form()
 
@@ -150,11 +159,16 @@ class ClientPageController:
         else:
             self.ui.Photo_3.setText("Фото")
 
+        self.ui.ClientTabWidget.setVisible(True)
         self.load_subscription()
         self.load_trainings()
         self.load_group_trainings()
 
     # ---------------- CRUD клиента ----------------
+    def add_new_client(self):
+        self.clear_client_form()
+        self.ui.ClientTabWidget.setVisible(True)
+
     def save_client(self):
         ln = self.ui.Last_nameEdit_3.text().strip()
         fn = self.ui.First_nameEdit_3.text().strip()
@@ -178,6 +192,7 @@ class ClientPageController:
             )
 
         self.load_clients()
+        self.ui.ClientTabWidget.setVisible(False)
 
     def delete_client(self):
         if not self.current_client_id:
@@ -191,6 +206,7 @@ class ClientPageController:
 
         client_delete(self.current_client_id)
         self.load_clients()
+        self.ui.ClientTabWidget(False)
 
     # ---------------- photo ----------------
     def select_photo(self, event):
@@ -284,6 +300,25 @@ class ClientPageController:
             return False
 
         sub = subscription_get_by_id(self.current_subscription_id)
+        if not sub:
+            return False
+
+        start = sub['start_date']
+        if isinstance(start, str):
+            start = datetime.strptime(start, "%Y-%m-%d").date()
+
+        for p in self.subscription_prices:
+            if p['id'] == sub['subscription_price_id']:
+                end = subscription_calculate_end(start, p['duration'])
+                return date.today() <= end
+
+        return False
+
+    def is_subscription_active(self, subscription_id) -> bool:
+        if not subscription_id:
+            return False
+
+        sub = subscription_get_by_id(subscription_id)
         if not sub:
             return False
 
