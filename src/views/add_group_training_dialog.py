@@ -8,7 +8,9 @@ from src.models.group_trainings import GroupTraining
 from src.models.group_attendances import (
     group_attendance_create,
     group_attendance_get_count_by_training,
-    group_attendance_check_client_on_training
+    group_attendance_check_client_on_training,
+    group_attendance_get_by_id,
+    group_attendance_delete
 )
 
 
@@ -23,6 +25,7 @@ class AddGroupTrainingDialog(QDialog):
 
         self.client = client
         self.current_training = None
+        self.matching_trainings = []  # Список тренировок в выбранном слоте
 
         self.time_slots = [
             "07:00", "08:00", "09:00", "10:00", "11:00",
@@ -34,21 +37,22 @@ class AddGroupTrainingDialog(QDialog):
         # ---- connections ----
         self.ui.ScheduleTable.cellClicked.connect(self.on_cell_clicked)
         self.ui.AddGroupTrainingBtn.clicked.connect(self.save_attendance)
-        self.ui.DeleteGroupTrainingBtn.setVisible(False)
 
-        # навигация по неделям (ВАЖНО: _2)
+        # НОВОЕ: Обработка смены тренировки в комбобоксе
+        self.ui.GroupTrainingComboBox.currentIndexChanged.connect(self.on_training_combo_changed)
+
+        self.attendance_id = None  # Добавляем для отслеживания режима редактирования
+
+        # Подключаем кнопку удаления
+        self.ui.DeleteGroupTrainingBtn.clicked.connect(self.delete_attendance)
+
         self.ui.LeftButton_2.clicked.connect(self.previous_week)
         self.ui.RightButton_2.clicked.connect(self.next_week)
 
         # клиент
-        full_name = (
-            f"{self.client['last_name']} "
-            f"{self.client['first_name']} "
-            f"{self.client.get('middle_name', '')}"
-        ).strip()
+        full_name = f"{self.client['last_name']} {self.client['first_name']} {self.client.get('middle_name', '')}".strip()
         self.ui.ClientE.setText(full_name)
 
-        # init
         self.update_week_label()
         self.load_schedule()
 
@@ -104,6 +108,16 @@ class AddGroupTrainingDialog(QDialog):
             )
 
         self.ui.DateL_3.setText(text)
+
+    def on_training_combo_changed(self, index):
+        if index < 0:
+            return
+
+        # Получаем объект тренировки из данных выбранного пункта
+        selected_tr = self.ui.GroupTrainingComboBox.itemData(index)
+        if selected_tr:
+            self.current_training = selected_tr
+            self.update_training_info()
 
     def previous_week(self):
         self.current_week_start -= timedelta(days=7)
@@ -167,39 +181,89 @@ class AddGroupTrainingDialog(QDialog):
             return f"{hh:02}:{mm:02}"
         return str(t)[:5]
 
-    # ---------------- cell clicked ----------------
 
     def on_cell_clicked(self, row, column):
         week = self.get_week_dates()
         selected_date = week[column]
         time_str = self.time_slots[row]
 
+        # Получаем все тренировки на этот день
         trainings = GroupTraining.get_all_in_week(selected_date, selected_date)
-        matching = [t for t in trainings if self.format_time_to_slot(t.start_time) == time_str]
+        # Фильтруем те, что попадают в выбранное время
+        self.matching_trainings = [t for t in trainings if self.format_time_to_slot(t.start_time) == time_str]
 
-        if not matching:
+        if not self.matching_trainings:
             QMessageBox.warning(self, "Ошибка", "В этом слоте нет тренировок")
             self.current_training = None
-            self.clear_training_info()  # если есть метод очистки правой панели
+            self.ui.GroupTrainingComboBox.clear()
+            self.clear_training_info()
             return
 
-        self.current_training = matching[0]
+        # Заполняем ComboBox списком найденных тренировок
+        self.ui.GroupTrainingComboBox.blockSignals(True) # Блокируем, чтобы не вызывать on_training_combo_changed раньше времени
+        self.ui.GroupTrainingComboBox.clear()
+        for tr in self.matching_trainings:
+            # Отображаем название услуги и тренера в выпадающем списке
+            display_text = f"{tr.service_name} ({tr.trainer_name})"
+            self.ui.GroupTrainingComboBox.addItem(display_text, tr)
+        self.ui.GroupTrainingComboBox.blockSignals(False)
+
+        # По умолчанию выбираем первую
+        self.current_training = self.matching_trainings[0]
+        self.ui.GroupTrainingComboBox.setCurrentIndex(0)
         self.update_training_info()
 
+    def load_existing_attendance(self, attendance_id):
+        """Загрузка данных при редактировании записи"""
+        self.attendance_id = attendance_id
+        attendance = group_attendance_get_by_id(attendance_id)
+        if not attendance:
+            return
+
+        # Находим саму тренировку
+        target_training_id = attendance['group_training_id']
+        tr = GroupTraining.get_by_id(target_training_id)
+        if not tr:
+            return
+
+        # Переключаем календарь на неделю этой тренировки
+        self.current_week_start = self._get_monday_of_week(tr.training_date)
+        self.update_week_label()
+        self.load_schedule()
+
+        # Эмулируем клик по ячейке, чтобы заполнить ComboBox и поля
+        row = self.get_time_index(tr.start_time)
+        col = tr.training_date.weekday()
+        self.on_cell_clicked(row, col)
+
+        # Выбираем именно эту тренировку в ComboBox (если в слоте их несколько)
+        for i in range(self.ui.GroupTrainingComboBox.count()):
+            item_tr = self.ui.GroupTrainingComboBox.itemData(i)
+            if item_tr and item_tr.group_training_id == target_training_id:
+                self.ui.GroupTrainingComboBox.setCurrentIndex(i)
+                break
+
+        # Настраиваем UI для режима редактирования
+        self.ui.AddGroupTrainingBtn.setText("Обновить")
+        self.ui.DeleteGroupTrainingBtn.setVisible(True)
+        self.setWindowTitle("Редактирование записи")
+
     def clear_training_info(self):
-        self.ui.DayE.setText("")
-        self.ui.MonthE.setText("")
-        self.ui.YearE.setText("")
-        self.ui.TimeE.setText("")
-        self.ui.TrainingE.setText("")
-        self.ui.HallE.setText("")
-        self.ui.MaxE.setText("")
-        self.ui.TrainerE.setText("")
+        self.ui.DayE.clear()
+        self.ui.MonthE.clear()
+        self.ui.YearE.clear()
+        self.ui.TimeE.clear()
+        self.ui.HallE.clear()
+        self.ui.MaxE.clear()
+        self.ui.TrainerE.clear()
 
     # ---------------- info panel ----------------
 
     def update_training_info(self):
         tr = self.current_training
+        if not tr:
+            return
+
         td = tr.training_date
 
         self.ui.DayE.setText(str(td.day))
@@ -212,7 +276,6 @@ class AddGroupTrainingDialog(QDialog):
             else str(tr.start_time)[:5]
         )
 
-        self.ui.TrainingE.setText(tr.service_name or "")
         self.ui.HallE.setText(tr.hall_name or "")
         self.ui.MaxE.setText(str(tr.capacity) if tr.capacity else "")
         self.ui.TrainerE.setText(tr.trainer_name or "")
@@ -250,3 +313,26 @@ class AddGroupTrainingDialog(QDialog):
         QMessageBox.information(self, "Успех", "Вы успешно записаны на тренировку")
         self.accept()
 
+        if self.attendance_id:
+            group_attendance_delete(self.attendance_id)
+
+            # Создаем новую запись (или перезаписываем)
+        group_attendance_create(tr.group_training_id, self.client["client_id"])
+        QMessageBox.information(self, "Успех", "Запись обновлена" if self.attendance_id else "Клиент записан")
+        self.accept()
+
+    def delete_attendance(self):
+        """Удаление записи о посещении"""
+        if not self.attendance_id:
+            return
+
+        reply = QMessageBox.question(
+            self, "Удаление", "Отменить запись клиента на эту тренировку?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            if group_attendance_delete(self.attendance_id):
+                QMessageBox.information(self, "Успех", "Запись отменена")
+                self.accept()
+            else:
+                QMessageBox.critical(self, "Ошибка", "Не удалось удалить запись")

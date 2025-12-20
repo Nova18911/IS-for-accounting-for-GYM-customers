@@ -246,7 +246,7 @@ class TrainerPageController:
             self.ui.SaveTrainerBtn.setText("Сохранить (Новый)")
             self.ui.DeleteTrainerBtn.setEnabled(False)
             try:
-                self.ui.AddTrainerBtn.setText("Новый тренер (Сброс)")
+                self.ui.AddTrainerBtn.setText("Добавить")
             except AttributeError:
                 pass
             self.ui.LastNameTrainerEdit.setFocus()

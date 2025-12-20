@@ -94,6 +94,7 @@ class Ui_AddPersonalTrainingDialog(object):
         self.DeletePersonalTrainingBtn.setObjectName("DeletePersonalTrainingBtn")
         self.PricePersonalTrainingEdit = QtWidgets.QLineEdit(parent=AddPersonalTrainingDialog)
         self.PricePersonalTrainingEdit.setGeometry(QtCore.QRect(370, 300, 141, 31))
+        self.PricePersonalTrainingEdit.setReadOnly(True)
         self.PricePersonalTrainingEdit.setObjectName("PricePersonalTrainingEdit")
 
         self.retranslateUi(AddPersonalTrainingDialog)

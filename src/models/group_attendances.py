@@ -1,30 +1,25 @@
-# src/models/group_attendance.py
 from src.database.connector import db
-from datetime import datetime
 
 
-def group_attendance_create(group_training_id, client_id, attendance_date=None):
-    """Создать запись о посещении групповой тренировки"""
+def group_attendance_create(group_training_id, client_id):
     if not db.reconnect_if_needed():
         raise ConnectionError("Не удалось подключиться к БД")
 
-    attendance_date = attendance_date or datetime.now()
     cur = db.cursor
     cur.execute("""
-        INSERT INTO group_attendances (group_training_id, client_id, attendance_date)
-        VALUES (%s, %s, %s)
-    """, (group_training_id, client_id, attendance_date))
+        INSERT INTO group_attendances (group_training_id, client_id)
+        VALUES (%s, %s)
+    """, (group_training_id, client_id))
     return db.get_last_insert_id()
 
 
 def group_attendance_get_by_id(attendance_id):
-    """Получить запись о посещении по ID"""
     if not db.reconnect_if_needed():
         return None
 
     cur = db.cursor
     cur.execute("""
-        SELECT attendance_id, group_training_id, client_id, attendance_date
+        SELECT attendance_id, group_training_id, client_id
         FROM group_attendances
         WHERE attendance_id=%s
     """, (attendance_id,))
@@ -33,31 +28,27 @@ def group_attendance_get_by_id(attendance_id):
         return {
             'attendance_id': row[0],
             'group_training_id': row[1],
-            'client_id': row[2],
-            'attendance_date': row[3],
+            'client_id': row[2]
         }
     return None
 
 
 def group_attendance_get_by_client(client_id):
-    """Все посещения данного клиента"""
     if not db.reconnect_if_needed():
         return []
 
     cur = db.cursor
     cur.execute("""
-        SELECT attendance_id, group_training_id, client_id, attendance_date
+        SELECT attendance_id, group_training_id, client_id
         FROM group_attendances
         WHERE client_id=%s
-        ORDER BY attendance_date
     """, (client_id,))
     rows = cur.fetchall()
     return [
         {
             'attendance_id': r[0],
             'group_training_id': r[1],
-            'client_id': r[2],
-            'attendance_date': r[3]
+            'client_id': r[2]
         } for r in rows
     ]
 

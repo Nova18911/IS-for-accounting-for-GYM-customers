@@ -15,10 +15,12 @@ class HallPageController:
 
     def setup_interface(self):
         table = self.ui.HallTableWidget
-        table.setEditTriggers(table.EditTrigger.NoEditTriggers)  # таблица read-only
+        table.setEditTriggers(table.EditTrigger.NoEditTriggers)
         table.setSelectionBehavior(table.SelectionBehavior.SelectRows)
         table.setColumnWidth(0, 230)
         table.setColumnWidth(1, 230)
+
+        # Клик по таблице для редактирования
         table.itemClicked.connect(self.on_table_item_clicked)
 
         # Кнопки виджета
@@ -26,7 +28,7 @@ class HallPageController:
         self.ui.Save_hallBtn.clicked.connect(self.on_save_clicked)
         self.ui.Delete_hallBtn.clicked.connect(self.on_delete_clicked)
 
-        # Изначально кнопка удалить неактивна
+        # Изначально кнопка "Удалить" неактивна
         self.ui.Delete_hallBtn.setEnabled(False)
 
     def load_halls(self):
@@ -47,22 +49,27 @@ class HallPageController:
         self.clear_form()
 
     def on_table_item_clicked(self, item):
-        """Заполнить виджет справа данными выбранного зала"""
         row = item.row()
         table = self.ui.HallTableWidget
         hall_id = table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+
         hall = Hall.get_by_id(hall_id)
         if not hall:
             return
+
         self.current_hall_id = hall.hall_id
         self.ui.HallEdit.setText(hall.hall_name)
         self.ui.CapacityEdit.setText(str(hall.capacity))
+
+        # Показываем виджет и настраиваем кнопки для режима редактирования
         self.ui.widget_hall.setVisible(True)
         self.ui.Delete_hallBtn.setEnabled(True)
+        self.ui.Save_hallBtn.setText("Обновить")
 
     def add_new_hall(self):
         self.clear_form()
         self.ui.widget_hall.setVisible(True)
+        self.ui.HallEdit.setFocus()
 
     def on_save_clicked(self):
         """Создать новый зал или обновить существующий"""
@@ -121,8 +128,9 @@ class HallPageController:
             QMessageBox.critical(None, "Ошибка", "Не удалось удалить зал")
 
     def clear_form(self):
-        """Очистить поля виджета"""
         self.current_hall_id = None
         self.ui.HallEdit.setText("")
         self.ui.CapacityEdit.setText("")
         self.ui.Delete_hallBtn.setEnabled(False)
+        self.ui.Save_hallBtn.setText("Сохранить")
+        self.ui.HallTableWidget.clearSelection()

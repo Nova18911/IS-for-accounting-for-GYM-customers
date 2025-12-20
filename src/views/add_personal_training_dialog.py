@@ -2,7 +2,6 @@ from PyQt6.QtWidgets import QDialog, QListWidgetItem, QMessageBox
 from PyQt6.QtCore import Qt
 from datetime import date, time
 
-from src.models.client import client_get_by_id
 from src.ui.add_personal_training_dialog import Ui_AddPersonalTrainingDialog
 from src.models.personal_trainings import (
     personal_training_create,
@@ -23,13 +22,13 @@ class AddPersonalTrainingDialog(QDialog):
 
         self.client = client  # dict
         self.trainers = trainer_get_all(only_personal=True)
-        self.current_training_id = None  # None — новая тренировка, иначе редактируем существующую
+        self.current_training_id = None
 
         self.setup_interface()
         self.setup_signals()
         self.load_default_date()
 
-    # ---------------- interface ----------------
+
     def setup_interface(self):
         full_name = f"{self.client['last_name']} {self.client['first_name']} {self.client.get('middle_name', '')}".strip()
         self.ui.Client.setText(full_name)
@@ -38,22 +37,31 @@ class AddPersonalTrainingDialog(QDialog):
         for t in self.trainers:
             self.ui.TrainerComboBox.addItem(
                 f"{t['last_name']} {t['first_name']}",
-                t['trainer_id']
+                t
             )
 
+        self.update_price_from_trainer()
         self.update_free_time_list()
 
     def setup_signals(self):
+        # При смене тренера обновляем и список времени, и стоимость
         self.ui.TrainerComboBox.currentIndexChanged.connect(self.update_free_time_list)
+        self.ui.TrainerComboBox.currentIndexChanged.connect(self.update_price_from_trainer)
+
+        # Следим за изменением даты для обновления свободного времени
         self.ui.DayPersonalTrainingEdit.textChanged.connect(self.update_free_time_list)
         self.ui.MonthPersonalTrainingEdit.textChanged.connect(self.update_free_time_list)
         self.ui.YearPersonalTrainingEdit.textChanged.connect(self.update_free_time_list)
+
         self.ui.SavePersonalTrainingBtn.clicked.connect(self.save_training)
         self.ui.DeletePersonalTrainingBtn.clicked.connect(self.delete_training)
 
     # ---------------- helpers ----------------
     def get_selected_trainer_id(self):
-        return self.ui.TrainerComboBox.currentData()
+        data = self.ui.TrainerComboBox.currentData()
+        if isinstance(data, dict):
+            return data.get('trainer_id')
+        return data
 
     def get_training_date(self):
         try:
@@ -136,36 +144,60 @@ class AddPersonalTrainingDialog(QDialog):
         self.ui.PricePersonalTrainingEdit.setText(str(training.get('price') or ""))
         self.ui.DeletePersonalTrainingBtn.setVisible(True)
 
+    def update_price_from_trainer(self):
+        """Обновляет поле цены ставкой выбранного тренера из его типа"""
+        trainer_data = self.ui.TrainerComboBox.currentData()
+        if trainer_data and 'rate' in trainer_data:
+            try:
+                price_val = int(float(trainer_data['rate']))
+                self.ui.PricePersonalTrainingEdit.setText(str(price_val))
+            except (ValueError, TypeError):
+                self.ui.PricePersonalTrainingEdit.clear()
+        else:
+            self.ui.PricePersonalTrainingEdit.clear()
+
     # ---------------- validation ----------------
     def validate_form(self):
         if not self.get_selected_trainer_id():
             QMessageBox.warning(self, "Ошибка", "Выберите тренера!")
             return False
+
         t_date = self.get_training_date()
-        if not t_date or t_date <= date.today():
+        # Разрешаем запись на сегодня и будущее (убрали запрет на текущий день)
+        if not t_date or t_date < date.today():
             QMessageBox.warning(self, "Ошибка", "Выберите корректную дату!")
             return False
+
         if not self.ui.FreeTimelistWidget.selectedItems():
             QMessageBox.warning(self, "Ошибка", "Выберите время!")
             return False
-        price = self.ui.PricePersonalTrainingEdit.text().strip()
-        if not price.isdigit() or int(price) <= 0:
-            QMessageBox.warning(self, "Ошибка", "Введите корректную цену!")
+
+        # Улучшенная валидация цены (поддерживает 1000.00)
+        price_text = self.ui.PricePersonalTrainingEdit.text().strip()
+        try:
+            price_val = float(price_text)
+            if price_val <= 0:
+                raise ValueError
+        except ValueError:
+            QMessageBox.warning(self, "Ошибка", "У тренера не указана корректная стоимость!")
             return False
+
         return True
 
     # ---------------- save ----------------
     def save_training(self):
         if not self.validate_form():
             return
+
         trainer_id = self.get_selected_trainer_id()
         t_date = self.get_training_date()
         start_time_str = self.ui.FreeTimelistWidget.selectedItems()[0].text()
         start_time = time(int(start_time_str.split(":")[0]), int(start_time_str.split(":")[1]))
-        price = int(self.ui.PricePersonalTrainingEdit.text().strip())
+
+        # Финальная конвертация перед сохранением в БД
+        price = int(float(self.ui.PricePersonalTrainingEdit.text().strip()))
 
         if self.current_training_id:
-            # обновляем существующую тренировку
             personal_training_update(
                 self.current_training_id,
                 self.client['client_id'],
@@ -175,7 +207,6 @@ class AddPersonalTrainingDialog(QDialog):
                 price
             )
         else:
-            # создаём новую тренировку
             personal_training_create(
                 client_id=self.client['client_id'],
                 trainer_id=trainer_id,

@@ -115,5 +115,25 @@ class DatabaseConnector:
             self.cursor = None
             self.connection = None
 
+    def execute_sql_file(self, file_path: str) -> bool:
+        """Считывает SQL-файл и выполняет команды по одной."""
+        if not self.reconnect_if_needed():
+            return False
+
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                # Разделяем файл на отдельные запросы по точке с запятой
+                sql_commands = f.read().split(';')
+
+            for command in sql_commands:
+                if command.strip():  # Пропускаем пустые строки
+                    self.cursor.execute(command)
+
+            self.connection.commit()
+            return True
+
+        except (FileNotFoundError, pymysql.MySQLError) as e:
+            print(f"[Ошибка] Не удалось выполнить SQL-файл {file_path}: {e}")
+            return False
 
 db = DatabaseConnector()

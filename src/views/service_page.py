@@ -76,6 +76,7 @@ class ServicePageController:
         for h in Hall.get_all():
             self.ui.HallComboBox.addItem(h.hall_name, h.hall_id)
 
+
     def load_services(self):
         services = service_model.get_all_services()
         table = self.ui.TableService
@@ -94,7 +95,7 @@ class ServicePageController:
             item_name.setData(Qt.ItemDataRole.UserRole, svc["service_id"])
             item_hall = QTableWidgetItem(hall_name or "Не указан")
             item_capacity = QTableWidgetItem(hall_capacity or "Не указана")
-            item_price = QTableWidgetItem(str(svc["price"]) if svc["price"] else "Не указана")
+            item_price = QTableWidgetItem(str(int(float(svc["price"]))) if svc["price"] else "Не указана")
 
             for itm in (item_name, item_hall, item_capacity, item_price):
                 itm.setFlags(itm.flags() & ~Qt.ItemFlag.ItemIsEditable)
@@ -131,7 +132,7 @@ class ServicePageController:
 
         self.current_service_id = svc_id
         self.ui.TypeServiceEdit.setText(svc["service_name"])
-        self.ui.PriceEdit.setText(str(svc["price"]) if svc["price"] else "")
+        self.ui.PriceEdit.setText(str(int(float(svc["price"]))) if svc["price"] else "")
         if svc["hall_id"]:
             idx = self.ui.HallComboBox.findData(svc["hall_id"])
             if idx >= 0:
@@ -154,6 +155,7 @@ class ServicePageController:
         self.ui.labelColorE.setStyleSheet("")
 
     def add_new_service(self):
+        self.load_halls()
         self.reset_form()
         self.ui.widget_service.setVisible(True)
 

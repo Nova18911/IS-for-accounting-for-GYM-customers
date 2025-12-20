@@ -37,6 +37,7 @@ class SchedulePageController:
         self.load_schedule()
         self.connect_buttons()
         self.reset_form()
+        self.ui.widget_schedule.setVisible(False)
 
     # ---------------------------
     # Utilities
@@ -197,7 +198,7 @@ class SchedulePageController:
     # Form panel
     # ---------------------------
     def show_edit_panel(self):
-        self.ui.widget.setVisible(True)
+        self.ui.widget_schedule.setVisible(True)
 
     def reset_form(self):
         self.current_training = None
@@ -258,14 +259,8 @@ class SchedulePageController:
         self.ui.DeleteGroupTrainingBtn.setEnabled(True)
         self.ui.GroupTrainingL.setText("Редактирование тренировки")
 
-    # ---------------------------
-    # Save / Delete
-    # ---------------------------
+
     def save_training(self):
-        """
-        Сохраняет новую или обновляет существующую групповую тренировку
-        с проверкой пересечений по тренеру, залу и типу услуги.
-        """
         # 1. Сбор данных из полей ввода
         day = self.ui.DayEdit.text().strip()
         month = self.ui.MonthEdit.text().strip()
@@ -274,7 +269,6 @@ class SchedulePageController:
         service_id = self.ui.ServiceComboBox.currentData()
         trainer_id = self.ui.TrainerComboBox.currentData()
 
-        # 2. Базовая проверка на заполненность
         if not (day and month and year and time_str):
             QMessageBox.warning(self.ui.centralwidget, "Ошибка", "Введите дату и время!")
             return
@@ -287,7 +281,6 @@ class SchedulePageController:
             QMessageBox.warning(self.ui.centralwidget, "Ошибка", "Выберите тренера!")
             return
 
-        # 3. Преобразование типов и валидация формата
         try:
             training_date = date(int(year), int(month), int(day))
 
@@ -301,22 +294,20 @@ class SchedulePageController:
             QMessageBox.warning(self.ui.centralwidget, "Ошибка", "Некорректный формат даты или времени!")
             return
 
-        # ID текущей тренировки (если редактируем), чтобы проверка не натыкалась на саму себя
+
         exclude_id = self.current_training.group_training_id if self.current_training else None
 
-        # 4. Проверки бизнес-логики (Обработчик ошибок по вашему запросу)
 
-        # Проверяем занятость тренера
         trainer_busy = not GroupTraining.check_trainer_availability(
             trainer_id, training_date, start_time, exclude_id
         )
 
-        # Проверяем наличие такой же услуги (тренировки) в это время
+
         service_exists = GroupTraining.check_service_existence(
             service_id, training_date, start_time, exclude_id
         )
 
-        # Вывод специфичных сообщений об ошибках
+
         if trainer_busy and service_exists:
             QMessageBox.warning(self.ui.centralwidget, "Ошибка",
                                 "Такая тренировка уже существует (совпадает и тренер, и тип занятия)!")
@@ -330,7 +321,6 @@ class SchedulePageController:
                                 "Вы уже добавляли в это время эту тренировку!")
             return
 
-        # 5. Проверка доступности зала
         service_obj = Service.get_by_id(service_id)
         if service_obj and service_obj.hall_id:
             hall_available = GroupTraining.check_hall_availability(
@@ -341,17 +331,15 @@ class SchedulePageController:
                                     "Зал, в котором проводится эта тренировка, уже занят!")
                 return
 
-        # 6. Сохранение в базу данных
+
         try:
             if self.current_training:
-                # Режим редактирования
                 self.current_training.training_date = training_date
                 self.current_training.start_time = start_time
                 self.current_training.service_id = service_id
                 self.current_training.trainer_id = trainer_id
                 success = self.current_training.save()
             else:
-                # Режим создания новой записи
                 new_tr = GroupTraining(
                     training_date=training_date,
                     start_time=start_time,
@@ -362,9 +350,9 @@ class SchedulePageController:
 
             if success:
                 QMessageBox.information(self.ui.centralwidget, "Успех", "Расписание успешно обновлено")
-                self.load_schedule()  # Перерисовываем таблицу
-                self.reset_form()  # Очищаем поля
-                self.ui.widget.setVisible(False)  # Скрываем панель редактирования
+                self.load_schedule()
+                self.reset_form()
+                self.ui.widget_schedule.setVisible(False)
             else:
                 QMessageBox.critical(self.ui.centralwidget, "Ошибка", "Не удалось сохранить данные в БД")
 

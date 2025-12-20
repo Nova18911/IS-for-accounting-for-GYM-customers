@@ -259,24 +259,6 @@
      <string/>
     </property>
    </widget>
-   <widget class="QLabel" name="TrainingE">
-    <property name="geometry">
-     <rect>
-      <x>20</x>
-      <y>300</y>
-      <width>221</width>
-      <height>31</height>
-     </rect>
-    </property>
-    <property name="font">
-     <font>
-      <pointsize>9</pointsize>
-     </font>
-    </property>
-    <property name="text">
-     <string/>
-    </property>
-   </widget>
    <widget class="QLabel" name="DayE">
     <property name="geometry">
      <rect>
@@ -347,6 +329,16 @@
     </property>
     <property name="text">
      <string/>
+    </property>
+   </widget>
+   <widget class="QComboBox" name="GroupTrainingComboBox">
+    <property name="geometry">
+     <rect>
+      <x>10</x>
+      <y>300</y>
+      <width>251</width>
+      <height>31</height>
+     </rect>
     </property>
    </widget>
   </widget>

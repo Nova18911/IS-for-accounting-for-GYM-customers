@@ -82,6 +82,8 @@ class ClientPageController:
         # Тренировки
         self.ui.PersonalTrainingBtn_3.clicked.connect(self.add_personal_training)
         self.ui.GroupTrainingBtn_3.clicked.connect(self.add_group_training)
+        self.ui.GroupTrainingTabWidget_3.itemDoubleClicked.connect(self.edit_group_training_attendance)
+
 
     # ---------------- subscription UI ----------------
     def fill_subscription_prices(self):
@@ -136,33 +138,57 @@ class ClientPageController:
             self.load_clients()
 
     def on_client_selected(self, item):
-        row = item.row()
-        client_id = self.ui.ClientsTabWidget.item(row, 0).data(Qt.ItemDataRole.UserRole)
-        client = client_get_by_id(client_id)
-        if not client:
-            return
+        try:
+            row = item.row()
+            table = self.ui.ClientsTabWidget
+            client_id = table.item(row, 0).data(Qt.ItemDataRole.UserRole)
 
-        self.current_client_id = client['client_id']
-        self.current_subscription_id = client['subscription_id']
-        self.current_photo_data = client.get('photo')
 
-        self.ui.Last_nameEdit_3.setText(client['last_name'])
-        self.ui.First_nameEdit_3.setText(client['first_name'])
-        self.ui.Midle_nameEdit_3.setText(client.get('middle_name') or "")
-        self.ui.PhoneEdit_3.setText(client.get('phone') or "")
-        self.ui.EmailEdit_3.setText(client.get('email') or "")
+            client = client_get_by_id(client_id)
+            if not client:
+                return
 
-        if client.get('photo'):
-            pix = QPixmap()
-            pix.loadFromData(client['photo'])
-            self.ui.Photo_3.setPixmap(pix.scaled(80, 80, Qt.AspectRatioMode.KeepAspectRatio))
-        else:
-            self.ui.Photo_3.setText("Фото")
+            self.ui.ClientTabWidget.setTabEnabled(1, True)
+            self.ui.ClientTabWidget.setTabEnabled(2, True)
 
-        self.ui.ClientTabWidget.setVisible(True)
-        self.load_subscription()
-        self.load_trainings()
-        self.load_group_trainings()
+
+            self.current_client_id = client['client_id']
+            self.current_subscription_id = client.get('subscription_id')
+            self.current_photo_data = client.get('photo')
+
+            self.ui.Last_nameEdit_3.setText(client.get('last_name', ''))
+            self.ui.First_nameEdit_3.setText(client.get('first_name', ''))
+            self.ui.Midle_nameEdit_3.setText(client.get('middle_name') or "")
+            self.ui.PhoneEdit_3.setText(client.get('phone') or "")
+            self.ui.EmailEdit_3.setText(client.get('email') or "")
+
+
+            if client.get('photo'):
+                pix = QPixmap()
+                if pix.loadFromData(client['photo']):
+                    scaled_pix = pix.scaled(
+                        self.ui.Photo_3.width(),
+                        self.ui.Photo_3.height(),
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation
+                    )
+                    self.ui.Photo_3.setPixmap(scaled_pix)
+                else:
+                    self.ui.Photo_3.setText("Ошибка фото")
+            else:
+                self.ui.Photo_3.clear()
+                self.ui.Photo_3.setText("Нет фото")
+
+
+            self.ui.ClientTabWidget.setVisible(True)
+
+            self.load_subscription()
+            self.load_trainings()
+            self.load_group_trainings()
+
+        except Exception as e:
+            print(f"Ошибка в on_client_selected: {e}")
+            QMessageBox.critical(None, "Ошибка", f"Не удалось загрузить данные клиента: {e}")
 
     # ---------------- CRUD клиента ----------------
     def add_new_client(self):
@@ -206,7 +232,7 @@ class ClientPageController:
 
         client_delete(self.current_client_id)
         self.load_clients()
-        self.ui.ClientTabWidget(False)
+        self.ui.ClientTabWidget.setVisible(False)
 
     # ---------------- photo ----------------
     def select_photo(self, event):
@@ -477,8 +503,10 @@ class ClientPageController:
         table.setRowCount(len(trainings))
 
         for row, ga in enumerate(trainings):
-            # Скрытый столбец с ID посещения
-            table.setItem(row, 0, QTableWidgetItem(str(ga['attendance_id'])))
+            # Сохраняем ID как текст и как данные пользователя для надежности
+            id_item = QTableWidgetItem(str(ga['attendance_id']))
+            id_item.setData(Qt.ItemDataRole.UserRole, ga['attendance_id'])
+            table.setItem(row, 0, id_item)
 
             # Получаем тренировку
             tr = GroupTraining.get_by_id(ga['group_training_id'])
@@ -512,8 +540,26 @@ class ClientPageController:
         dialog.exec()
         self.load_group_trainings()
 
+    def edit_group_training_attendance(self, item):
+        row = item.row()
+        table = self.ui.GroupTrainingTabWidget_3
 
-    # ---------------- helpers ----------------
+        # Получаем attendance_id из первого (скрытого) столбца
+        attendance_id_item = table.item(row, 0)
+        if not attendance_id_item:
+            return
+        attendance_id = int(attendance_id_item.text())
+
+        client_data = client_get_by_id(self.current_client_id)
+        if not client_data:
+            return
+
+        dialog = AddGroupTrainingDialog(client_data)
+        dialog.load_existing_attendance(attendance_id)  # Метод, который мы создали выше
+
+        if dialog.exec():
+            self.load_group_trainings()  # Обновляем таблицу после закрытия
+
     def clear_client_form(self):
         self.current_client_id = None
         self.current_subscription_id = None
@@ -525,3 +571,10 @@ class ClientPageController:
         self.ui.PhoneEdit_3.clear()
         self.ui.EmailEdit_3.clear()
         self.ui.Photo_3.setText("Фото")
+
+
+        self.ui.ClientTabWidget.setCurrentIndex(0)
+
+
+        self.ui.ClientTabWidget.setTabEnabled(1, False)
+        self.ui.ClientTabWidget.setTabEnabled(2, False)

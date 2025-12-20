@@ -11,10 +11,13 @@ class Service:
 
     @staticmethod
     def _row_to_obj(row: tuple) -> "Service":
+        raw_price = row[2]
+        clean_price = int(float(raw_price)) if raw_price is not None else 0
+
         return Service(
             service_id=row[0],
             service_name=row[1],
-            price=row[2],
+            price=clean_price,
             hall_id=row[3]
         )
 

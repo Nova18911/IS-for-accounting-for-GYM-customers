@@ -2,19 +2,18 @@ from src.database.connector import db
 
 
 def trainer_get_all(only_personal=False):
-    """
-    Возвращает всех тренеров как list[dict].
-    Если only_personal=True — возвращает только тех тренеров,
-    которые могут проводить персональные тренировки (Персональный + Общий).
-    """
     query = """
-        SELECT t.trainer_id, t.last_name, t.first_name, t.middle_name,
-               t.phone, t.email, t.trainer_type_id, t.photo, tt.trainer_type_name
-        FROM trainers t
-        JOIN trainer_types tt ON t.trainer_type_id = tt.trainer_type_id
-        ORDER BY t.last_name, t.first_name
+    SELECT t.trainer_id, t.last_name, t.first_name, t.middle_name,
+           t.phone, t.email, t.photo,
+           t.trainer_type_id, tt.trainer_type_name, tt.rate
+    FROM trainers t
+    JOIN trainer_types tt ON t.trainer_type_id = tt.trainer_type_id
+    ORDER BY t.last_name, t.first_name
     """
     rows = db.execute_query(query)
+    if not rows:
+        return []
+
     trainers = [
         {
             "trainer_id": r[0],
@@ -23,14 +22,16 @@ def trainer_get_all(only_personal=False):
             "middle_name": r[3],
             "phone": r[4],
             "email": r[5],
-            "trainer_type_id": r[6],
-            "photo": r[7],
-            "trainer_type_name": r[8]
+            "photo": r[6],
+            "trainer_type_id": r[7],
+            "trainer_type_name": r[8],
+            "rate": r[9] # ТЕПЕРЬ СТАВКА ТОЧНО ЕСТЬ
         }
-        for r in rows or []
+        for r in rows
     ]
 
     if only_personal:
+        # Оставляем только тех, кто может проводить персональные тренировки
         trainers = [
             t for t in trainers
             if t['trainer_type_name'] in ('Персональный тренер', 'Общий тренер')
@@ -39,28 +40,23 @@ def trainer_get_all(only_personal=False):
     return trainers
 
 
-
-def trainer_get_by_id(trainer_id: int):
-    rows = db.execute_query("""
-        SELECT trainer_id, last_name, first_name, middle_name,
-               phone, email, trainer_type_id, photo
-        FROM trainers
-        WHERE trainer_id = %s
-    """, (trainer_id,))
-    if not rows:
-        return None
+def trainer_get_by_id(trainer_id):
+    query = """
+    SELECT t.trainer_id, t.last_name, t.first_name, t.middle_name,
+           t.phone, t.email, t.photo,
+           t.trainer_type_id, tt.trainer_type_name, tt.rate
+    FROM trainers t
+    JOIN trainer_types tt ON t.trainer_type_id = tt.trainer_type_id
+    WHERE t.trainer_id = %s
+    """
+    rows = db.execute_query(query, (trainer_id,))
+    if not rows: return None
     r = rows[0]
     return {
-        "trainer_id": r[0],
-        "last_name": r[1],
-        "first_name": r[2],
-        "middle_name": r[3],
-        "phone": r[4],
-        "email": r[5],
-        "trainer_type_id": r[6],
-        "photo": r[7]
+        "trainer_id": r[0], "last_name": r[1], "first_name": r[2], "middle_name": r[3],
+        "phone": r[4], "email": r[5], "photo": r[6],
+        "trainer_type_id": r[7], "trainer_type_name": r[8], "rate": r[9]
     }
-
 
 def trainer_create(last, first, middle, photo, phone, trainer_type_id, email):
     db.execute_query("""

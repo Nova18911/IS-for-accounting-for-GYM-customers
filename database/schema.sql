@@ -15,42 +15,40 @@ DROP TABLE IF EXISTS trainer_types;
 DROP TABLE IF EXISTS users;
 
 
--- Таблица залов
 CREATE TABLE halls (
     hall_id INT PRIMARY KEY AUTO_INCREMENT,
     hall_name VARCHAR(30) NOT NULL UNIQUE,
     capacity INT
 );
 
--- Таблица типов тренеров
+
 CREATE TABLE trainer_types (
     trainer_type_id INT PRIMARY KEY AUTO_INCREMENT,
     trainer_type_name VARCHAR(50) NOT NULL UNIQUE,
-    rate INT
+    rate DECIMAL(10, 2) NOT NULL
 );
 
--- Таблица тренеров
+
 CREATE TABLE trainers (
     trainer_id INT PRIMARY KEY AUTO_INCREMENT,
     last_name VARCHAR(50) NOT NULL,
     first_name VARCHAR(50) NOT NULL,
     middle_name VARCHAR(50),
     photo LONGBLOB,
-    phone VARCHAR(20) UNIQUE,
-    email VARCHAR(50) UNIQUE,
+    phone VARCHAR(20) NOT NULL,
+    email VARCHAR(50),
     trainer_type_id INT NOT NULL,
     FOREIGN KEY (trainer_type_id) REFERENCES trainer_types(trainer_type_id)
 );
 
 
--- Таблица стоимости абонементов
 CREATE TABLE subscription_prices (
     subscription_price_id INT PRIMARY KEY AUTO_INCREMENT,
     duration VARCHAR(50) NOT NULL UNIQUE,
-    price VARCHAR(45) NOT NULL
+    price DECIMAL(10, 2) NOT NULL
 );
 
--- Таблица абонементов
+
 CREATE TABLE subscriptions (
     subscription_id INT PRIMARY KEY AUTO_INCREMENT,
     start_date DATE NOT NULL DEFAULT CURRENT_DATE,
@@ -58,29 +56,29 @@ CREATE TABLE subscriptions (
     FOREIGN KEY (subscription_price_id) REFERENCES subscription_prices(subscription_price_id)
 );
 
--- Таблица клиентов
+
 CREATE TABLE clients (
     client_id INT PRIMARY KEY AUTO_INCREMENT,
     last_name VARCHAR(50) NOT NULL,
     first_name VARCHAR(50) NOT NULL,
     middle_name VARCHAR(50),
-    phone VARCHAR(20) UNIQUE,
-    email VARCHAR(100) UNIQUE,
+    phone VARCHAR(20) NOT NULL,
+    email VARCHAR(50),
     photo LONGBLOB,
     subscription_id INT UNIQUE,
-    FOREIGN KEY (subscription_id) REFERENCES subscriptions(subscription_id)
+    FOREIGN KEY (subscription_id) REFERENCES subscriptions(subscription_id) ON DELETE CASCADE
 );
 
--- Таблица услуг
+
 CREATE TABLE services (
     service_id INT PRIMARY KEY AUTO_INCREMENT,
     service_name VARCHAR(100) NOT NULL UNIQUE,
-    price INT,
+    price DECIMAL(10, 2) NOT NULL,
     hall_id INT NOT NULL,
-    FOREIGN KEY (hall_id) REFERENCES halls(hall_id)
+    FOREIGN KEY (hall_id) REFERENCES halls(hall_id) ON DELETE CASCADE
 );
 
--- Таблица групповых тренировок
+
 CREATE TABLE group_trainings (
     group_training_id INT PRIMARY KEY AUTO_INCREMENT,
     training_date DATE NOT NULL,
@@ -88,42 +86,37 @@ CREATE TABLE group_trainings (
     trainer_id INT NOT NULL,
     service_id INT NOT NULL,
     FOREIGN KEY (trainer_id) REFERENCES trainers(trainer_id),
-    FOREIGN KEY (service_id) REFERENCES services(service_id)
+    FOREIGN KEY (service_id) REFERENCES services(service_id) ON DELETE CASCADE
 );
 
--- Таблица персональных тренировок
+
 CREATE TABLE personal_trainings (
     personal_training_id INT PRIMARY KEY AUTO_INCREMENT,
     training_date DATE NOT NULL,
     start_time TIME NOT NULL,
-    price INT,
+    price DECIMAL(10, 2),
     trainer_id INT NOT NULL,
     client_id INT NOT NULL,
     FOREIGN KEY (trainer_id) REFERENCES trainers(trainer_id),
-    FOREIGN KEY (client_id) REFERENCES clients(client_id)
+    FOREIGN KEY (client_id) REFERENCES clients(client_id) ON DELETE CASCADE
 );
 
--- Таблица посещений групповых тренировок
+
 CREATE TABLE group_attendances (
     attendance_id INT PRIMARY KEY AUTO_INCREMENT,
     group_training_id INT NOT NULL,
     client_id INT NOT NULL,
-    attendance_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (group_training_id) REFERENCES group_trainings(group_training_id),
-    FOREIGN KEY (client_id) REFERENCES clients(client_id)
+    FOREIGN KEY (group_training_id) REFERENCES group_trainings(group_training_id) ON DELETE CASCADE,
+    FOREIGN KEY (client_id) REFERENCES clients(client_id) ON DELETE CASCADE
 );
 
--- Включаем проверку внешних ключей обратно
 SET FOREIGN_KEY_CHECKS = 1;
 
-
--- Заполнение таблицы типов тренеров
 INSERT INTO trainer_types (trainer_type_name, rate) VALUES
-('Общий тренер', 2000),      -- Оклад 2000 за тренировку
-('Групповой тренер', 1500),  -- Оклад 1500 за групповую тренировку
-('Персональный тренер', 3000); -- Оклад 3000 за персональную тренировку
+('Общий тренер', 2000),
+('Групповой тренер', 1500),
+('Персональный тренер', 3000);
 
--- Заполнение таблицы стоимости абонементов
 INSERT INTO subscription_prices (duration, price) VALUES
 ('1 месяц', 3000),
 ('3 месяца', 8000),
