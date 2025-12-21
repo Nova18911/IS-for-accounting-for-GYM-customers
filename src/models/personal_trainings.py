@@ -1,8 +1,6 @@
 from datetime import date, time
 from src.database.connector import db
 
-# -------------------- Personal Trainings --------------------
-
 def personal_training_get_by_id(personal_training_id):
     rows = db.execute_query(
         "SELECT personal_training_id, client_id, trainer_id, training_date, start_time, price "

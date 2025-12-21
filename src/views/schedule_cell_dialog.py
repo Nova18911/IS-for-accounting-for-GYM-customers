@@ -1,20 +1,11 @@
-# src/views/schedule_cell_dialog.py
 from datetime import time, timedelta
-
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QTableWidget, QTableWidgetItem,
-    QDialogButtonBox, QMessageBox
+    QDialogButtonBox
 )
-from PyQt6.QtCore import Qt
 from src.models.group_trainings import GroupTraining
 
-
 class ScheduleCellDialog(QDialog):
-    """
-    Диалог для одной ячейки расписания (дата + время).
-    Показывает все групповые тренировки в этом слоте.
-    """
-
     def __init__(self, parent, training_date, time_slot):
         super().__init__(parent)
         self.training_date = training_date
@@ -29,9 +20,6 @@ class ScheduleCellDialog(QDialog):
         self._setup_ui()
         self._load_trainings()
 
-    # ---------------------
-    # UI
-    # ---------------------
     def _setup_ui(self):
         layout = QVBoxLayout(self)
 
@@ -60,16 +48,11 @@ class ScheduleCellDialog(QDialog):
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
 
-    # ---------------------
-    # Data
-    # ---------------------
     def _load_trainings(self):
         trainings = GroupTraining.get_all_in_week(self.training_date, self.training_date)
 
         filtered = []
         for t in trainings:
-            # Превращаем любое время (time или timedelta) в унифицированную строку HH:MM
-            t_time_str = ""
             if isinstance(t.start_time, time):
                 t_time_str = t.start_time.strftime("%H:%M")
             elif isinstance(t.start_time, timedelta):
@@ -90,9 +73,6 @@ class ScheduleCellDialog(QDialog):
             self.table.setItem(row, 3, QTableWidgetItem(str(t.capacity)))
             self.table.setItem(row, 4, QTableWidgetItem(str(t.group_training_id)))
 
-    # ---------------------
-    # Events
-    # ---------------------
     def on_row_double_clicked(self, row, _):
         training_id_item = self.table.item(row, 4)
         if not training_id_item:

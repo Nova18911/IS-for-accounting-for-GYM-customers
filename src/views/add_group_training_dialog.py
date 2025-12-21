@@ -1,4 +1,3 @@
-# src/views/add_group_training_dialog.py
 from PyQt6.QtWidgets import QDialog, QTableWidgetItem, QMessageBox
 from PyQt6.QtCore import Qt
 from datetime import datetime, date, time, timedelta
@@ -15,8 +14,6 @@ from src.models.group_attendances import (
 
 
 class AddGroupTrainingDialog(QDialog):
-    """Диалог для записи клиента на групповую тренировку."""
-
     def __init__(self, client: dict, parent=None):
         super().__init__(parent)
 
@@ -25,7 +22,7 @@ class AddGroupTrainingDialog(QDialog):
 
         self.client = client
         self.current_training = None
-        self.matching_trainings = []  # Список тренировок в выбранном слоте
+        self.matching_trainings = []
 
         self.time_slots = [
             "07:00", "08:00", "09:00", "10:00", "11:00",
@@ -34,11 +31,8 @@ class AddGroupTrainingDialog(QDialog):
 
         self.current_week_start = self._get_monday_of_week(date.today())
 
-        # ---- connections ----
         self.ui.ScheduleTable.cellClicked.connect(self.on_cell_clicked)
         self.ui.AddGroupTrainingBtn.clicked.connect(self.save_attendance)
-
-        # НОВОЕ: Обработка смены тренировки в комбобоксе
         self.ui.GroupTrainingComboBox.currentIndexChanged.connect(self.on_training_combo_changed)
 
         self.attendance_id = None  # Добавляем для отслеживания режима редактирования
@@ -56,7 +50,6 @@ class AddGroupTrainingDialog(QDialog):
         self.update_week_label()
         self.load_schedule()
 
-    # ---------------- utilities ----------------
 
     def _get_monday_of_week(self, input_date):
         return input_date - timedelta(days=input_date.weekday())
@@ -65,8 +58,6 @@ class AddGroupTrainingDialog(QDialog):
         return [self.current_week_start + timedelta(days=i) for i in range(7)]
 
     def get_time_index(self, time_obj):
-        t_str = None
-
         if isinstance(time_obj, str):
             try:
                 t = datetime.strptime(time_obj, "%H:%M:%S").time()
@@ -88,7 +79,6 @@ class AddGroupTrainingDialog(QDialog):
 
         return self.time_slots.index(t_str) if t_str in self.time_slots else -1
 
-    # ---------------- week navigation ----------------
 
     def update_week_label(self):
         week = self.get_week_dates()
@@ -98,7 +88,6 @@ class AddGroupTrainingDialog(QDialog):
             "января", "февраля", "марта", "апреля", "мая", "июня",
             "июля", "августа", "сентября", "октября", "ноября", "декабря"
         ]
-
         if start.month == end.month:
             text = f"{start.day}-{end.day} {months[start.month - 1]} {start.year} г."
         else:
@@ -128,8 +117,6 @@ class AddGroupTrainingDialog(QDialog):
         self.current_week_start += timedelta(days=7)
         self.update_week_label()
         self.load_schedule()
-
-    # ---------------- schedule ----------------
 
     def clear_table(self):
         for r in range(self.ui.ScheduleTable.rowCount()):
@@ -168,7 +155,6 @@ class AddGroupTrainingDialog(QDialog):
             self.ui.ScheduleTable.setItem(r, c, item)
 
     def format_time_to_slot(self, t):
-        """Возвращает строку 'HH:MM' для сравнения с time_slots."""
         if isinstance(t, str):
             try:
                 dt = datetime.strptime(t, "%H:%M:%S").time()
@@ -203,7 +189,7 @@ class AddGroupTrainingDialog(QDialog):
             return
 
         # Заполняем ComboBox списком найденных тренировок
-        self.ui.GroupTrainingComboBox.blockSignals(True) # Блокируем, чтобы не вызывать on_training_combo_changed раньше времени
+        self.ui.GroupTrainingComboBox.blockSignals(True)
         self.ui.GroupTrainingComboBox.clear()
         for tr in self.matching_trainings:
             # Отображаем название услуги и тренера в выпадающем списке
@@ -217,7 +203,6 @@ class AddGroupTrainingDialog(QDialog):
         self.update_training_info()
 
     def load_existing_attendance(self, attendance_id):
-        """Загрузка данных при редактировании записи"""
         self.attendance_id = attendance_id
         attendance = group_attendance_get_by_id(attendance_id)
         if not attendance:
@@ -260,7 +245,6 @@ class AddGroupTrainingDialog(QDialog):
         self.ui.MaxE.clear()
         self.ui.TrainerE.clear()
 
-    # ---------------- info panel ----------------
 
     def update_training_info(self):
         tr = self.current_training
@@ -283,7 +267,6 @@ class AddGroupTrainingDialog(QDialog):
         self.ui.MaxE.setText(str(tr.capacity) if tr.capacity else "")
         self.ui.TrainerE.setText(tr.trainer_name or "")
 
-    # ---------------- save attendance ----------------
 
     def save_attendance(self):
         if not self.current_training:
@@ -296,14 +279,12 @@ class AddGroupTrainingDialog(QDialog):
             tr = self.current_training
             client_id = self.client["client_id"]
 
-            # 1. Проверка на дубликат (запись на ЭТУ ЖЕ тренировку)
+            # Проверка на дубликат (запись на ЭТУ ЖЕ тренировку)
             if not self.attendance_id:
                 if group_attendance_check_client_on_training(tr.group_training_id, client_id):
                     QMessageBox.warning(self, "Ошибка", "Клиент уже записан на эту тренировку")
                     return
 
-            # 2. НОВОЕ: Проверка на конфликт времени (запись на ЛЮБУЮ тренировку в этот час)
-            # Если мы редактируем текущую запись, конфликт с самой собой не считаем
             if not self.attendance_id:
                 if group_attendance_has_conflict(client_id, tr.training_date, tr.start_time):
                     QMessageBox.warning(
@@ -313,7 +294,7 @@ class AddGroupTrainingDialog(QDialog):
                     )
                     return
 
-            # 3. Проверка вместимости
+            # Проверка вместимости
             current_count = group_attendance_get_count_by_training(tr.group_training_id)
             if current_count >= (tr.capacity or 0):
                 QMessageBox.warning(self, "Ошибка", "В группе нет мест")
@@ -330,7 +311,6 @@ class AddGroupTrainingDialog(QDialog):
             self.ui.AddGroupTrainingBtn.setEnabled(True)
 
     def delete_attendance(self):
-        """Удаление записи о посещении"""
         if not self.attendance_id:
             return
 

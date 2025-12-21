@@ -1,4 +1,3 @@
-# src/models/halls.py
 from typing import Optional, List
 from src.database.connector import db
 
@@ -9,16 +8,10 @@ class Hall:
         self.hall_name = hall_name
         self.capacity = capacity
 
-    # -------------------------
-    # Преобразование строки из БД в объект
-    # -------------------------
     @staticmethod
     def _row_to_obj(row: tuple) -> "Hall":
         return Hall(hall_id=row[0], hall_name=row[1], capacity=row[2])
 
-    # -------------------------
-    # CRUD
-    # -------------------------
     @classmethod
     def get_all(cls) -> List["Hall"]:
         sql = "SELECT hall_id, hall_name, capacity FROM halls ORDER BY hall_name"
@@ -42,7 +35,6 @@ class Hall:
         return bool(rows and rows[0][0] > 0)
 
     def save(self) -> bool:
-        """Создание или обновление зала"""
         if self.hall_id:
             # обновление
             sql = "UPDATE halls SET hall_name=%s, capacity=%s WHERE hall_id=%s"
@@ -67,9 +59,6 @@ class Hall:
         res = db.execute_query(sql, (self.hall_id,))
         return res is not None
 
-    # -------------------------
-    # Обёртки для UI
-    # -------------------------
     @staticmethod
     def create(hall_name: str, capacity: int) -> Optional["Hall"]:
         hall = Hall(hall_name=hall_name, capacity=capacity)

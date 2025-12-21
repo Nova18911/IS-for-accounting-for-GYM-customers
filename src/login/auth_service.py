@@ -13,18 +13,15 @@ class AuthService:
 
     @staticmethod
     def login(email, password):
-        """Авторизация без шифрования"""
         if not email or not password:
             return None
-
         users = AuthService.load_users()
-
         for u in users:
             if (
                 u["email"] == email
                 and u["password"] == password
                 and u["is_active"]
             ):
-                return u  # user dict: user_id, email, role
+                return u
 
         return None

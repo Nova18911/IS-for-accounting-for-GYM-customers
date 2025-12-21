@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import (
-    QTableWidgetItem, QMessageBox, QDialog, QVBoxLayout, QComboBox, QDialogButtonBox, QLabel
+    QTableWidgetItem, QMessageBox
 )
 from PyQt6.QtCore import Qt
 from src.models.group_trainings import GroupTraining
@@ -8,13 +8,10 @@ import src.models.trainers as trainer_model
 import src.models.trainer_types as trainer_types_model
 from src.models.halls import Hall
 from datetime import datetime, timedelta, date, time
-
 from src.views.schedule_cell_dialog import ScheduleCellDialog
 
 
 class SchedulePageController:
-    """Контроллер для страницы расписания групповых тренировок."""
-
     def __init__(self, ui, user_id=None, user_email=None, user_role=None):
         self.ui = ui
         self.user_id = user_id
@@ -28,8 +25,6 @@ class SchedulePageController:
             "13:00", "14:00", "15:00", "16:00", "18:00", "19:00"
         ]
         self.current_training = None
-
-        # Настройка таблицы и формы
         self._setup_interface()
         self.load_services()
         self.load_group_trainers()
@@ -39,9 +34,6 @@ class SchedulePageController:
         self.reset_form()
         self.ui.widget_schedule.setVisible(False)
 
-    # ---------------------------
-    # Utilities
-    # ---------------------------
     def _create_hall_colors(self):
         return {
             1: "#FFB6C1", 2: "#87CEFA", 3: "#98FB98", 4: "#DDA0DD",
@@ -55,12 +47,6 @@ class SchedulePageController:
         return [self.current_week_start + timedelta(days=i) for i in range(7)]
 
     def get_time_index(self, time_obj):
-        """
-        Возвращает индекс времени в self.time_slots.
-        Поддерживаются: str ("HH:MM" или "HH:MM:SS"), datetime.time, datetime.timedelta
-        """
-        t_str = None
-
         if isinstance(time_obj, str):
             try:
                 t = datetime.strptime(time_obj, "%H:%M:%S").time()
@@ -79,9 +65,6 @@ class SchedulePageController:
 
         return self.time_slots.index(t_str) if t_str in self.time_slots else -1
 
-    # ---------------------------
-    # UI setup / loading
-    # ---------------------------
     def _setup_interface(self):
         self.ui.ScheduleTable.horizontalHeader().setDefaultSectionSize(110)
         self.ui.ScheduleTable.verticalHeader().setDefaultSectionSize(40)
@@ -172,9 +155,6 @@ class SchedulePageController:
         from PyQt6.QtGui import QColor
         return QColor(hexcolor)
 
-    # ---------------------------
-    # Cell double click / dialogs
-    # ---------------------------
     def on_cell_double_clicked(self, row, column):
         week = self.get_week_dates()
         selected_date = week[column]
@@ -192,11 +172,6 @@ class SchedulePageController:
             else:
                 self.create_new_training(row, column)
 
-
-
-    # ---------------------------
-    # Form panel
-    # ---------------------------
     def show_edit_panel(self):
         self.ui.widget_schedule.setVisible(True)
 
@@ -261,7 +236,7 @@ class SchedulePageController:
 
 
     def save_training(self):
-        # 1. Сбор данных из полей ввода
+        # Сбор данных из полей ввода
         day = self.ui.DayEdit.text().strip()
         month = self.ui.MonthEdit.text().strip()
         year = self.ui.YearEdit.text().strip()
@@ -361,23 +336,39 @@ class SchedulePageController:
 
     def delete_training(self):
         if not self.current_training:
-            QMessageBox.warning(self.ui, "Ошибка", "Нет выбранной тренировки")
             return
-        reply = QMessageBox.question(self.ui, "Подтверждение", "Удалить тренировку?",
-                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        if reply != QMessageBox.StandardButton.Yes:
-            return
-        ok = self.current_training.delete()
-        if ok:
-            QMessageBox.information(self.ui, "Успех", "Удалено")
-        else:
-            QMessageBox.critical(self.ui, "Ошибка", "Не удалось удалить")
-        self.load_schedule()
-        self.reset_form()
 
-    # ---------------------------
-    # Buttons
-    # ---------------------------
+        reply = QMessageBox.question(
+            self.ui.centralwidget,  # Используйте конкретный виджет как родителя
+            "Подтверждение",
+            "Удалить тренировку и все записи клиентов на неё?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            # Блокируем сигналы таблицы, чтобы исключить вылеты при перерисовке
+            self.ui.ScheduleTable.blockSignals(True)
+
+            try:
+                success = self.current_training.delete()
+
+                if success:
+                    # Скрываем панель и сбрасываем данные ПЕРЕД загрузкой новой таблицы
+                    self.ui.widget_schedule.setVisible(False)
+                    self.reset_form()
+                    self.load_schedule()
+                    QMessageBox.information(self.ui.centralwidget, "Успех", "Тренировка удалена")
+                else:
+                    QMessageBox.warning(self.ui.centralwidget, "Ошибка", "Не удалось удалить запись из БД")
+
+            except Exception as e:
+                print(f"Ошибка при удалении: {e}")
+
+            finally:
+                # Обязательно разблокируем сигналы
+                self.ui.ScheduleTable.blockSignals(False)
+
+
     def connect_buttons(self):
         self.ui.LeftButton.clicked.connect(self.previous_week)
         self.ui.RightButton.clicked.connect(self.next_week)

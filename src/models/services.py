@@ -1,4 +1,3 @@
-# src/models/services.py
 from typing import Optional, List, Dict, Any
 from src.database.connector import db
 
@@ -52,7 +51,6 @@ class Service:
         return bool(rows and rows[0][0] > 0)
 
     def save(self) -> bool:
-        """Создание или обновление услуги."""
         if getattr(self, 'service_id', None):
             # обновление
             sql = """
@@ -82,9 +80,6 @@ class Service:
         return res is not None
 
 
-# -------------------------
-# Functional API expected by views (wrappers)
-# -------------------------
 def _service_obj_to_dict(svc: Service) -> Dict[str, Any]:
     return {
         "service_id": svc.service_id,
@@ -94,7 +89,6 @@ def _service_obj_to_dict(svc: Service) -> Dict[str, Any]:
     }
 
 def get_all_services() -> List[Dict[str, Any]]:
-    """Возвращает список словарей (для совместимости с views)."""
     objs = Service.get_all()
     return [_service_obj_to_dict(s) for s in objs]
 

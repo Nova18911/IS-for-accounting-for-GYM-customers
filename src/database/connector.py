@@ -25,8 +25,6 @@ class DatabaseConnector:
 
 
     def connect(self) -> bool:
-        """Подключение к MySQL с 3 попытками."""
-
         for attempt in range(1, self.max_retries + 1):
 
             try:
@@ -44,13 +42,10 @@ class DatabaseConnector:
             except pymysql.MySQLError as e:
                 print(f"[Ошибка] Не удалось подключиться (попытка {attempt}): {e}")
                 time.sleep(1)
-
-        print("[ФАТАЛЬНО] Подключение к MySQL не удалось после всех попыток.")
         return False
 
 
     def reconnect_if_needed(self) -> bool:
-        """Проверяет соединение и переподключается при необходимости."""
         try:
             if self.connection is None or self.cursor is None:
                 return self.connect()
@@ -77,11 +72,9 @@ class DatabaseConnector:
         try:
             self.cursor.execute(query, params)
 
-            # SELECT запрос
             if query.strip().upper().startswith("SELECT"):
                 return self.cursor.fetchall()
 
-            # Остальные (INSERT, UPDATE, DELETE)
             self.connection.commit()
             return self.cursor.rowcount
 
@@ -91,7 +84,6 @@ class DatabaseConnector:
 
 
     def get_last_insert_id(self) -> Optional[int]:
-        """Возвращает ID последней вставленной строки."""
         try:
             self.cursor.execute("SELECT LAST_INSERT_ID()")
             row = self.cursor.fetchone()
@@ -103,7 +95,6 @@ class DatabaseConnector:
         return None
 
     def close(self):
-        """Закрывает соединение."""
         try:
             if self.cursor:
                 self.cursor.close()
@@ -116,17 +107,15 @@ class DatabaseConnector:
             self.connection = None
 
     def execute_sql_file(self, file_path: str) -> bool:
-        """Считывает SQL-файл и выполняет команды по одной."""
         if not self.reconnect_if_needed():
             return False
 
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
-                # Разделяем файл на отдельные запросы по точке с запятой
                 sql_commands = f.read().split(';')
 
             for command in sql_commands:
-                if command.strip():  # Пропускаем пустые строки
+                if command.strip():
                     self.cursor.execute(command)
 
             self.connection.commit()

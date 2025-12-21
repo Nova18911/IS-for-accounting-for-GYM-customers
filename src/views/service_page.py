@@ -5,8 +5,6 @@ from src.models.halls import Hall
 
 
 class ServicePageController:
-    """Логика страницы 'Услуги' с виджетом справа"""
-
     HALL_COLOR_MAP = {
         1: "#FFB6C1", 2: "#87CEFA", 3: "#98FB98", 4: "#DDA0DD", 5: "#FFD700",
         6: "#F0E68C", 7: "#ADD8E6", 8: "#90EE90", 9: "#FFA07A", 10: "#20B2AA",
@@ -23,8 +21,6 @@ class ServicePageController:
 
         self.ui.widget_service.setVisible(False)
 
-    # ---------------- UI / INIT ----------------
-
     def setup_interface(self):
         table = self.ui.TableService
         table.setColumnWidth(0, 200)
@@ -39,15 +35,11 @@ class ServicePageController:
         self.ui.SaveServiceBtn.clicked.connect(self.save_service)
         self.ui.DeleteServiceBtn.clicked.connect(self.delete_service)
         self.ui.HallComboBox.currentIndexChanged.connect(self.on_hall_changed)
-
-        # Кнопки навигации
         self.ui.ScheduleButton.clicked.connect(lambda: None)
         self.ui.ClientsButton.clicked.connect(lambda: None)
         self.ui.TrainerButton.clicked.connect(lambda: None)
         self.ui.HallButton.clicked.connect(lambda: None)
         self.ui.ReportButton.clicked.connect(lambda: None)
-
-    # ---------------- Helpers ----------------
 
     def reset_form(self):
         self.current_service_id = None
@@ -68,14 +60,11 @@ class ServicePageController:
                 if itm:
                     itm.setFlags(itm.flags() & ~Qt.ItemFlag.ItemIsEditable)
 
-    # ---------------- Loading ----------------
-
     def load_halls(self):
         self.ui.HallComboBox.clear()
         self.ui.HallComboBox.addItem("Выберите зал", None)
         for h in Hall.get_all():
             self.ui.HallComboBox.addItem(h.hall_name, h.hall_id)
-
 
     def load_services(self):
         services = service_model.get_all_services()
@@ -107,8 +96,6 @@ class ServicePageController:
 
         self.make_table_readonly()
         self.reset_form()
-
-    # ---------------- Interaction ----------------
 
     def get_selected_service_id(self):
         row = self.ui.TableService.currentRow()

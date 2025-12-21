@@ -35,8 +35,6 @@ from src.models.group_attendances import (
 )
 
 class ClientPageController:
-    """Контроллер страницы 'Клиенты'"""
-
     def __init__(self, ui):
         self.edit_group_training = None
         self.ui = ui
@@ -53,23 +51,19 @@ class ClientPageController:
         self.load_clients()
         self.ui.ClientTabWidget.setVisible(False)
 
-    # ---------------- interface ----------------
     def setup_interface(self):
         table = self.ui.ClientsTabWidget
         table.setEditTriggers(table.EditTrigger.NoEditTriggers)
         table.setSelectionBehavior(table.SelectionBehavior.SelectRows)
         table.itemClicked.connect(self.on_client_selected)
-
         # Поиск
         self.ui.SearchLastNameEdit.textChanged.connect(self.search_clients)
         self.ui.SearchPhoneEdit.textChanged.connect(self.search_clients)
-
         # Клиент
         self.ui.AddClientBtn.clicked.connect(self.add_new_client)
         self.ui.Save_clientBtn_3.clicked.connect(self.save_client)
         self.ui.Delete_clientBtn_3.clicked.connect(self.delete_client)
         self.ui.Photo_3.mousePressEvent = self.select_photo
-
         self.ui.Photo_3.setStyleSheet("""
                     QLabel {
                         border: 2px dashed #aaaaaa;
@@ -86,7 +80,6 @@ class ClientPageController:
         self.ui.Photo_3.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.ui.DeletePhotoClientBtn.clicked.connect(self.clear_photo)
-
         # Абонементы
         self.fill_subscription_prices()
         self.ui.LongTimeComboBox_3.currentIndexChanged.connect(
@@ -94,7 +87,6 @@ class ClientPageController:
         )
         self.ui.SaveSubBtn_3.clicked.connect(self.save_subscription)
         self.ui.DeleteSubBtn_3.clicked.connect(self.delete_subscription)
-
         # Тренировки
         self.ui.PersonalTrainingBtn_3.clicked.connect(self.add_personal_training)
         self.ui.GroupTrainingBtn_3.clicked.connect(self.add_group_training)
@@ -107,38 +99,30 @@ class ClientPageController:
         pt_table.horizontalHeader().setStretchLastSection(True)
         pt_table.setColumnHidden(0, True)  # Скрываем ID
 
-        # Настройка таблицы ГРУППОВЫХ тренировок
         gt_table = self.ui.GroupTrainingTabWidget_3
         gt_table.setColumnCount(6)
         gt_table.setHorizontalHeaderLabels(["ID", "Дата", "Время", "Услуга", "Зал", "Тренер"])
         gt_table.horizontalHeader().setStretchLastSection(True)
         gt_table.setColumnHidden(0, True)  # Скрываем ID
 
-
-    # ---------------- subscription UI ----------------
     def fill_subscription_prices(self):
         self.ui.LongTimeComboBox_3.clear()
         for p in self.subscription_prices:
             # В ComboBox ТОЛЬКО срок
             self.ui.LongTimeComboBox_3.addItem(p['duration'], p)
 
-    # ---------------- clients ----------------
     def load_clients(self, clients=None):
         table = self.ui.ClientsTabWidget
         table.setRowCount(0)
-
         clients = clients or client_get_all()
-
         for row, client in enumerate(clients):
             table.insertRow(row)
-
             table.setItem(row, 0, QTableWidgetItem(client['last_name']))
             table.item(row, 0).setData(Qt.ItemDataRole.UserRole, client['client_id'])
             table.setItem(row, 1, QTableWidgetItem(client['first_name']))
             table.setItem(row, 2, QTableWidgetItem(client.get('middle_name') or ""))
             table.setItem(row, 3, QTableWidgetItem(client.get('phone') or ""))
 
-            # -------- Абонемент --------
             sub_id = client.get('subscription_id')
 
             if sub_id:
@@ -148,7 +132,6 @@ class ClientPageController:
             else:
                 table.setItem(row, 4, QTableWidgetItem(""))
 
-            # -------- Актив --------
             is_active = self.is_subscription_active(sub_id)
             active_item = QTableWidgetItem("✓" if is_active else "-")
             active_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -220,7 +203,6 @@ class ClientPageController:
             print(f"Ошибка в on_client_selected: {e}")
             QMessageBox.critical(None, "Ошибка", f"Не удалось загрузить данные клиента: {e}")
 
-    # ---------------- CRUD клиента ----------------
     def add_new_client(self):
         self.clear_client_form()
         self.ui.ClientTabWidget.setVisible(True)
@@ -246,7 +228,6 @@ class ClientPageController:
             client_create(
                 ln, fn, middle, phone, email, self.current_photo_data
             )
-
         self.load_clients()
         self.ui.ClientTabWidget.setVisible(False)
 
@@ -264,7 +245,6 @@ class ClientPageController:
         self.load_clients()
         self.ui.ClientTabWidget.setVisible(False)
 
-    # ---------------- photo ----------------
     def select_photo(self, event):
         path, _ = QFileDialog.getOpenFileName(None, "Выбор фото", "", "Images (*.png *.jpg *.jpeg)")
         if not path:
@@ -279,7 +259,6 @@ class ClientPageController:
         self.current_photo_data = None
 
 
-    # ---------------- subscription ----------------
     def load_subscription(self):
         today = date.today()
 
@@ -353,7 +332,6 @@ class ClientPageController:
             self.ui.YearEndLabel_3.setText("")
 
     def client_has_active_subscription(self) -> bool:
-        """Проверяет, есть ли у клиента действующий абонемент"""
         if not self.current_subscription_id:
             return False
 
@@ -448,7 +426,7 @@ class ClientPageController:
         self.current_subscription_id = None
         self.load_subscription()
 
-    # ---------------- trainings ----------------
+
     def load_trainings(self):
         table = self.ui.PersonalTrainingTabWidget_3
         table.setRowCount(0)
@@ -552,13 +530,12 @@ class ClientPageController:
                 table.setItem(row, 2, QTableWidgetItem(str(tr.start_time)[:5]))
                 table.setItem(row, 3, QTableWidgetItem(tr.service_name or ""))
                 table.setItem(row, 4, QTableWidgetItem(tr.hall_name or ""))
-                # Используем trainer_name из объекта тренировки
                 table.setItem(row, 5, QTableWidgetItem(tr.trainer_name or "Не указан"))
 
         table.setEditTriggers(table.EditTrigger.NoEditTriggers)
 
     def add_group_training(self):
-        # 1. Проверки данных
+        # Проверки данных
         if not self.current_client_id:
             QMessageBox.warning(None, "Ошибка", "Сначала выберите клиента")
             return
@@ -570,8 +547,7 @@ class ClientPageController:
                 "Нельзя записать на групповую тренировку без активного абонемента"
             )
             return
-
-        # 2. Защита от дублирования через блокировку кнопки и проверку состояния
+        # Защита от дублирования через блокировку кнопки и проверку состояния
         if not self.ui.GroupTrainingBtn_3.isEnabled():
             return
 
@@ -588,7 +564,7 @@ class ClientPageController:
             self.ui.GroupTrainingBtn_3.setEnabled(True)
 
     def edit_group_training_attendance(self, item):
-        # 1. Защита от двойного открытия диалога (флаг-блокировка)
+        # Защита от двойного открытия диалога (флаг-блокировка)
         if hasattr(self, '_editing_group') and self._editing_group:
             return
 
@@ -609,7 +585,7 @@ class ClientPageController:
             if not client_data:
                 return
 
-            # 2. Создание и запуск диалога
+            # Создание и запуск диалога
             dialog = AddGroupTrainingDialog(client_data)
             dialog.load_existing_attendance(attendance_id)
 

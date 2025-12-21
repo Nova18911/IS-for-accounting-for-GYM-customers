@@ -1,9 +1,6 @@
 from src.database.connector import db
 
-
-
 def trainer_type_get_all():
-    """Возвращает список всех типов тренеров как list[dict]."""
     rows = db.execute_query(
         "SELECT trainer_type_id, trainer_type_name, rate FROM trainer_types ORDER BY trainer_type_name"
     )
@@ -18,9 +15,7 @@ def trainer_type_get_all():
         for r in rows
     ]
 
-
 def trainer_type_get_by_id(type_id: int):
-    """Возвращает один тип тренера по ID (dict) или None."""
     rows = db.execute_query(
         "SELECT trainer_type_id, trainer_type_name, rate FROM trainer_types WHERE trainer_type_id=%s",
         (type_id,)
@@ -33,4 +28,3 @@ def trainer_type_get_by_id(type_id: int):
         "trainer_type_name": r[1],
         "rate": r[2]
     }
-

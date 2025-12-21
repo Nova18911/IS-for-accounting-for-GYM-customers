@@ -55,7 +55,6 @@ def group_attendance_get_by_client(client_id):
 
 
 def group_attendance_get_by_training(group_training_id):
-    """Все посещения по конкретной групповой тренировке"""
     if not db.reconnect_if_needed():
         return []
 
@@ -77,7 +76,6 @@ def group_attendance_get_by_training(group_training_id):
 
 
 def group_attendance_delete(attendance_id):
-    """Удалить запись о посещении"""
     if not db.reconnect_if_needed():
         return False
 
@@ -87,7 +85,6 @@ def group_attendance_delete(attendance_id):
 
 
 def group_attendance_get_count_by_training(group_training_id):
-    """Сколько человек записано на тренировку"""
     if not db.reconnect_if_needed():
         return 0
 
@@ -97,7 +94,6 @@ def group_attendance_get_count_by_training(group_training_id):
 
 
 def group_attendance_check_client_on_training(group_training_id, client_id):
-    """Проверка, записан ли клиент на тренировку"""
     if not db.reconnect_if_needed():
         return False
 
@@ -110,7 +106,6 @@ def group_attendance_check_client_on_training(group_training_id, client_id):
     return cur.fetchone() is not None
 
 def group_attendance_has_conflict(client_id, training_date, start_time):
-    """Проверяет, записан ли клиент на любую другую тренировку в это же время."""
     if not db.reconnect_if_needed():
         return False
 

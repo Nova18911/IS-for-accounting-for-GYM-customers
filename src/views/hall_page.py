@@ -4,8 +4,6 @@ from src.models.halls import Hall
 
 
 class HallPageController:
-    """Логика страницы 'Залы' с виджетом справа"""
-
     def __init__(self, ui):
         self.ui = ui
         self.current_hall_id = None
@@ -19,23 +17,18 @@ class HallPageController:
         table.setSelectionBehavior(table.SelectionBehavior.SelectRows)
         table.setColumnWidth(0, 230)
         table.setColumnWidth(1, 230)
-
         # Клик по таблице для редактирования
         table.itemClicked.connect(self.on_table_item_clicked)
-
         # Кнопки виджета
         self.ui.AddHallBtn.clicked.connect(self.add_new_hall)
         self.ui.Save_hallBtn.clicked.connect(self.on_save_clicked)
         self.ui.Delete_hallBtn.clicked.connect(self.on_delete_clicked)
-
         # Изначально кнопка "Удалить" неактивна
         self.ui.Delete_hallBtn.setEnabled(False)
 
     def load_halls(self):
-        """Загрузить все залы в таблицу"""
         table = self.ui.HallTableWidget
         table.setRowCount(0)
-
         halls = Hall.get_all()
         for row, hall in enumerate(halls):
             table.insertRow(row)
@@ -45,18 +38,15 @@ class HallPageController:
             item_capacity.setData(Qt.ItemDataRole.UserRole, hall.hall_id)
             table.setItem(row, 0, item_name)
             table.setItem(row, 1, item_capacity)
-
         self.clear_form()
 
     def on_table_item_clicked(self, item):
         row = item.row()
         table = self.ui.HallTableWidget
         hall_id = table.item(row, 0).data(Qt.ItemDataRole.UserRole)
-
         hall = Hall.get_by_id(hall_id)
         if not hall:
             return
-
         self.current_hall_id = hall.hall_id
         self.ui.HallEdit.setText(hall.hall_name)
         self.ui.CapacityEdit.setText(str(hall.capacity))
@@ -72,7 +62,6 @@ class HallPageController:
         self.ui.HallEdit.setFocus()
 
     def on_save_clicked(self):
-        """Создать новый зал или обновить существующий"""
         name = self.ui.HallEdit.text().strip()
         cap_text = self.ui.CapacityEdit.text().strip()
         if not name:
@@ -106,12 +95,10 @@ class HallPageController:
             if not hall.save():
                 QMessageBox.critical(None, "Ошибка", "Не удалось обновить зал")
                 return
-
         self.load_halls()
         self.ui.widget_hall.setVisible(False)
 
     def on_delete_clicked(self):
-        """Удаление выбранного зала"""
         if not self.current_hall_id:
             return
         reply = QMessageBox.question(None, "Удаление",

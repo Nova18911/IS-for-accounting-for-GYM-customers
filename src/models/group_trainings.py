@@ -1,9 +1,6 @@
-# src/models/group_trainings.py
 from src.database.connector import db
 
 class GroupTraining:
-    """Упрощённая модель групповой тренировки."""
-
     def __init__(self, group_training_id=None, training_date=None, start_time=None,
                  trainer_id=None, service_id=None):
         self.group_training_id = group_training_id
@@ -11,8 +8,6 @@ class GroupTraining:
         self.start_time = start_time
         self.trainer_id = trainer_id
         self.service_id = service_id
-
-        # доп. поля (удобно для UI)
         self.trainer_name = None
         self.service_name = None
         self.hall_id = None
@@ -22,9 +17,7 @@ class GroupTraining:
     def __str__(self):
         return f"GroupTraining({self.group_training_id}) {self.training_date} {self.start_time}"
 
-    # -------------------
-    # CRUD
-    # -------------------
+
     def save(self):
         try:
             if self.group_training_id:
@@ -60,13 +53,8 @@ class GroupTraining:
             print("Ошибка GroupTraining.delete:", e)
             return False
 
-    # -------------------
-    # SELECT / HELPERS
-    # -------------------
     @staticmethod
     def _map_row_to_obj(row):
-        # row expected: group_training_id, training_date, start_time, trainer_id, service_id,
-        # t.last_name, t.first_name, t.middle_name, s.service_name, h.hall_name, h.capacity, h.hall_id
         gt = GroupTraining(
             group_training_id=row[0],
             training_date=row[1],
@@ -74,8 +62,6 @@ class GroupTraining:
             trainer_id=row[3],
             service_id=row[4]
         )
-
-        # trainer name
         try:
             if row[5] or row[6]:
                 name_parts = []
@@ -90,14 +76,10 @@ class GroupTraining:
                 gt.trainer_name = "Не указан"
         except Exception:
             gt.trainer_name = "Не указан"
-
-        # service / hall
         try:
             gt.service_name = row[8] or "Не указана"
             gt.hall_name = row[9] or "Не указан"
             gt.capacity = row[10] or 0
-            # hall_id might be placed last (if selected)
-            # some SQL variants may return hall_id earlier/later; try to get it
             gt.hall_id = row[11] if len(row) > 11 else None
         except Exception:
             gt.service_name = gt.service_name or "Не указана"
@@ -106,10 +88,6 @@ class GroupTraining:
 
     @staticmethod
     def get_all_in_week(start_date, end_date):
-        """
-        Возвращает список GroupTraining между start_date и end_date (включительно).
-        start_date/end_date — объекты date или строки 'YYYY-MM-DD'.
-        """
         try:
             query = """
             SELECT gt.group_training_id, gt.training_date, gt.start_time, gt.trainer_id, gt.service_id,
@@ -151,7 +129,6 @@ class GroupTraining:
 
     @staticmethod
     def check_trainer_availability(trainer_id, training_date, start_time, exclude_id=None):
-        """Возвращает True если тренер свободен"""
         try:
             if exclude_id:
                 query = """
@@ -172,7 +149,6 @@ class GroupTraining:
 
     @staticmethod
     def check_hall_availability(hall_id, training_date, start_time, exclude_id=None):
-        """Возвращает True если зал свободен (hall_id — id из таблицы halls)"""
         try:
             if exclude_id:
                 query = """
@@ -225,7 +201,6 @@ class GroupTraining:
 
     @staticmethod
     def check_service_existence(service_id, training_date, start_time, exclude_id=None):
-        """Возвращает True, если такая услуга (тип тренировки) уже запланирована в это время"""
         try:
             if exclude_id:
                 query = """

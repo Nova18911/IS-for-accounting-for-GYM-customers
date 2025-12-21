@@ -1,6 +1,5 @@
 from src.database.connector import db
 
-# -------------------- Clients --------------------
 
 def client_get_all():
     rows = db.execute_query(
@@ -65,8 +64,6 @@ def client_delete(client_id):
     query = "DELETE FROM clients WHERE client_id=%s"
     return db.execute_query(query, (client_id,))
 
-
-# -------------------- Search --------------------
 
 def client_search_by_last_name(last_name):
     rows = db.execute_query(

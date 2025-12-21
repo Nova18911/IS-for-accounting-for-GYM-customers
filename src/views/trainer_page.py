@@ -1,24 +1,16 @@
-# src/views/trainer_page.py
-import os
 import logging
 from typing import Optional, Dict
-
 from PyQt6.QtWidgets import (
     QTableWidgetItem, QMessageBox, QFileDialog, QHeaderView
 )
 from PyQt6.QtCore import Qt, QBuffer
 from PyQt6.QtGui import QPixmap, QImage
-
-# Импорт моделей
 from src.models.trainers import (
     trainer_get_all, trainer_get_by_id, trainer_create, trainer_update,
     trainer_delete, trainer_search_by_last_name, trainer_search_by_phone
 )
 from src.models.trainer_types import trainer_type_get_all, trainer_type_get_by_id
 
-# --------------------------
-# Настройка логгера и констант
-# --------------------------
 MAX_PHOTO_BYTES = 5 * 1024 * 1024  # 5 MB
 
 logger = logging.getLogger("trainer_page_controller")
@@ -29,7 +21,6 @@ if not logger.handlers:
     logger.setLevel(logging.INFO)
 
 def qimage_to_bytes(qimage: QImage, fmt: str = "PNG") -> bytes:
-    """Сохраняет QImage в байты для хранения в БД."""
     try:
         buf = QBuffer()
         buf.open(QBuffer.OpenModeFlag.WriteOnly)
@@ -44,29 +35,18 @@ def qimage_to_bytes(qimage: QImage, fmt: str = "PNG") -> bytes:
         return b""
 
 
-# --------------------------
-# Контроллер страницы тренеров
-# --------------------------
 class TrainerPageController:
-    """Контроллер для страницы 'Тренеры' в главном окне."""
-
     def __init__(self, ui):
         self.ui = ui
         self.current_trainer: Optional[Dict] = None
         self.current_photo_data: Optional[bytes] = None
-
-
         self._setup_interface()
         self._connect_signals()
         self.load_trainer_types()
         self.load_trainers()
         self.reset_form()
-
         self.ui.widget_trainer.setVisible(False)
 
-    # -----------------------
-    # Интерфейс таблицы
-    # -----------------------
     def _setup_interface(self):
         table = self.ui.TrainerTableWidget
         table.setColumnCount(7)
@@ -102,9 +82,6 @@ class TrainerPageController:
         self.ui.PhotoTrainerE.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.ui.PhotoTrainerE.setText("Добавить фото")
 
-    # -----------------------
-    # Сигналы
-    # -----------------------
     def _connect_signals(self):
         self.ui.TrainerTableWidget.doubleClicked.connect(self.on_table_double_click)
         self.ui.TrainerTableWidget.itemClicked.connect(self.on_table_item_clicked)
@@ -134,9 +111,6 @@ class TrainerPageController:
         except AttributeError:
             logger.warning("DeletePhotoTrainerBtn not found")
 
-    # -----------------------
-    # Загрузка данных
-    # -----------------------
     def load_trainer_types(self):
         try:
             combo = self.ui.TrainerTypeComboBox
@@ -181,9 +155,6 @@ class TrainerPageController:
             except Exception:
                 logger.exception("Failed to populate row %s in trainer table", rnum)
 
-    # -----------------------
-    # Работа с фото
-    # -----------------------
     def on_photo_clicked(self):
         self.load_photo()
 
@@ -224,7 +195,6 @@ class TrainerPageController:
         self.current_photo_data = None
 
     def on_delete_photo_clicked(self):
-        """Удаляет фото тренера, если оно есть."""
         if self.current_photo_data:
             confirm = QMessageBox.question(
                 self.ui.centralwidget,
@@ -236,10 +206,6 @@ class TrainerPageController:
                 self.clear_photo()
         else:
             QMessageBox.information(self.ui.centralwidget, "Информация", "Фото отсутствует")
-
-    # -----------------------
-    # CRUD / редактирование
-    # -----------------------
 
     def add_new_trainer(self):
         self.reset_form()
@@ -304,8 +270,6 @@ class TrainerPageController:
             if not tr:
                 QMessageBox.warning(self.ui.centralwidget, "Ошибка", "Тренер не найден")
                 return
-
-
 
             self.current_trainer = tr
             self.ui.LastNameTrainerEdit.setText(str(tr.get("last_name", "")))
@@ -396,9 +360,6 @@ class TrainerPageController:
             logger.exception("delete_trainer failed: %s", e)
             QMessageBox.critical(self.ui.centralwidget, "Ошибка", f"Не удалось удалить тренера: {e}")
 
-    # -----------------------
-    # Поиск
-    # -----------------------
     def on_search_last_name_changed(self, text):
         txt = text.strip()
         try:
@@ -421,9 +382,6 @@ class TrainerPageController:
         except Exception:
             logger.exception("on_search_phone_changed_failed")
 
-    # -----------------------
-    # Тип тренера
-    # -----------------------
     def on_trainer_type_changed(self, index):
         try:
             tid = self.ui.TrainerTypeComboBox.itemData(index)

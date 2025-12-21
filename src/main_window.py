@@ -8,7 +8,6 @@ from src.views.trainer_page import TrainerPageController
 from src.views.schedule_page import SchedulePageController
 from src.views.report_page import ReportsPageController
 
-
 class MainWindow(QMainWindow):
     def __init__(self, user_id, user_email, user_role):
         super().__init__()
@@ -85,7 +84,6 @@ class MainWindow(QMainWindow):
         self.ui.stackedWidget.setCurrentWidget(self.ui.TrainerPage)
 
     def show_halls(self):
-        # Метод load_halls в HallPageController обновляет главную таблицу залов
         self.hall_controller.load_halls()
         self.ui.stackedWidget.setCurrentWidget(self.ui.HallPage)
 
