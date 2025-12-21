@@ -333,7 +333,7 @@ class Ui_MainWindow(object):
         self.ScheduleTable.horizontalHeader().setDefaultSectionSize(90)
         self.ScheduleTable.horizontalHeader().setMinimumSectionSize(35)
         self.ScheduleTable.horizontalHeader().setSortIndicatorShown(True)
-        self.ScheduleTable.verticalHeader().setVisible(True)
+        self.ScheduleTable.verticalHeader().setVisible(False)
         self.stackedWidget.addWidget(self.SchedulePage)
         self.ClientPage = QtWidgets.QWidget()
         self.ClientPage.setObjectName("ClientPage")

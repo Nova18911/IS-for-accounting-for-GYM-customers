@@ -10,7 +10,7 @@ from src.models.group_attendances import (
     group_attendance_get_count_by_training,
     group_attendance_check_client_on_training,
     group_attendance_get_by_id,
-    group_attendance_delete
+    group_attendance_delete, group_attendance_has_conflict
 )
 
 
@@ -140,29 +140,32 @@ class AddGroupTrainingDialog(QDialog):
 
     def load_schedule(self):
         self.clear_table()
-
         week = self.get_week_dates()
         start_date, end_date = week[0], week[-1]
-
         trainings = GroupTraining.get_all_in_week(start_date, end_date)
 
+        # Создаем словарь для группировки: {(row, col): [tr1, tr2...]}
+        cells = {}
+
         for tr in trainings:
-            if not tr.training_date:
-                continue
-
             day_idx = (tr.training_date - start_date).days
-            if not 0 <= day_idx <= 6:
-                continue
-
             time_idx = self.get_time_index(tr.start_time)
-            if time_idx < 0:
-                continue
+            if 0 <= day_idx <= 6 and time_idx >= 0:
+                key = (time_idx, day_idx)
+                if key not in cells:
+                    cells[key] = []
+                cells[key].append(tr)
 
-            text = f"{tr.service_name or 'Не указано'}\n({tr.trainer_name or 'Тренер не указан'})"
+        for (r, c), tr_list in cells.items():
+            if len(tr_list) > 1:
+                text = f"Несколько ({len(tr_list)})\nнажми для выбора"
+            else:
+                tr = tr_list[0]
+                text = f"{tr.service_name}\n{tr.trainer_name}"
+
             item = QTableWidgetItem(text)
-            item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-
-            self.ui.ScheduleTable.setItem(time_idx, day_idx, item)
+            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.ui.ScheduleTable.setItem(r, c, item)
 
     def format_time_to_slot(self, t):
         """Возвращает строку 'HH:MM' для сравнения с time_slots."""
@@ -287,39 +290,44 @@ class AddGroupTrainingDialog(QDialog):
             QMessageBox.warning(self, "Ошибка", "Выберите тренировку")
             return
 
-        tr = self.current_training
+        self.ui.AddGroupTrainingBtn.setEnabled(False)
 
-        # ------------------ запрет записи на сегодня и в прошлое ------------------
-        if tr.training_date <= date.today() + timedelta(days=1):
-            QMessageBox.warning(self, "Ошибка", "Нельзя записываться на тренировку в этот день или в прошлое!")
-            return
-        # -------------------------------------------------------------------------
+        try:
+            tr = self.current_training
+            client_id = self.client["client_id"]
 
-        if group_attendance_check_client_on_training(
-                tr.group_training_id, self.client["client_id"]
-        ):
-            QMessageBox.warning(self, "Ошибка", "Вы уже записаны на эту тренировку")
-            return
+            # 1. Проверка на дубликат (запись на ЭТУ ЖЕ тренировку)
+            if not self.attendance_id:
+                if group_attendance_check_client_on_training(tr.group_training_id, client_id):
+                    QMessageBox.warning(self, "Ошибка", "Клиент уже записан на эту тренировку")
+                    return
 
-        current_count = group_attendance_get_count_by_training(tr.group_training_id)
-        if current_count >= (tr.capacity or 0):
-            QMessageBox.warning(
-                self, "Ошибка", "Превышена максимальная вместимость тренировки!"
-            )
-            return
+            # 2. НОВОЕ: Проверка на конфликт времени (запись на ЛЮБУЮ тренировку в этот час)
+            # Если мы редактируем текущую запись, конфликт с самой собой не считаем
+            if not self.attendance_id:
+                if group_attendance_has_conflict(client_id, tr.training_date, tr.start_time):
+                    QMessageBox.warning(
+                        self,
+                        "Конфликт времени",
+                        f"Клиент уже записан на другую тренировку в {self.format_time_to_slot(tr.start_time)}"
+                    )
+                    return
 
-        group_attendance_create(tr.group_training_id, self.client["client_id"])
+            # 3. Проверка вместимости
+            current_count = group_attendance_get_count_by_training(tr.group_training_id)
+            if current_count >= (tr.capacity or 0):
+                QMessageBox.warning(self, "Ошибка", "В группе нет мест")
+                return
 
-        QMessageBox.information(self, "Успех", "Вы успешно записаны на тренировку")
-        self.accept()
+            # Сохранение
+            if self.attendance_id:
+                group_attendance_delete(self.attendance_id)
 
-        if self.attendance_id:
-            group_attendance_delete(self.attendance_id)
-
-            # Создаем новую запись (или перезаписываем)
-        group_attendance_create(tr.group_training_id, self.client["client_id"])
-        QMessageBox.information(self, "Успех", "Запись обновлена" if self.attendance_id else "Клиент записан")
-        self.accept()
+            if group_attendance_create(tr.group_training_id, client_id):
+                QMessageBox.information(self, "Успех", "Запись оформлена")
+                self.accept()
+        finally:
+            self.ui.AddGroupTrainingBtn.setEnabled(True)
 
     def delete_attendance(self):
         """Удаление записи о посещении"""

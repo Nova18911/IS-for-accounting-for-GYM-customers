@@ -85,6 +85,23 @@ class TrainerPageController:
         table.setEditTriggers(table.EditTrigger.NoEditTriggers)
         table.setSelectionBehavior(table.SelectionBehavior.SelectRows)
 
+        self.ui.PhotoTrainerE.setStyleSheet("""
+                    QLabel {
+                        border: 2px dashed #aaaaaa;
+                        border-radius: 8px;
+                        background-color: #f9f9f9;
+                        color: #888888;
+                        font-weight: bold;
+                    }
+                    QLabel:hover {
+                        border: 2px solid #2ecc71; /* Зеленая рамка для тренеров */
+                        background-color: #f0fff0;
+                    }
+                """)
+        self.ui.PhotoTrainerE.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.ui.PhotoTrainerE.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.ui.PhotoTrainerE.setText("Добавить фото")
+
     # -----------------------
     # Сигналы
     # -----------------------

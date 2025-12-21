@@ -1,14 +1,9 @@
-# src/views/reports_page.py
 from PyQt6.QtWidgets import QTableWidgetItem
 from src.database.connector import db
 from datetime import date
-from src.models.client import client_get_all
-from src.models.subscriptions import subscription_get_by_id, subscription_calculate_end
-from src.models.subscription_prices import subscription_price_get_by_id
 from src.models.trainers import trainer_get_all
 
 class ReportsPageController:
-    """Контроллер вкладки 'Отчеты'."""
 
     def __init__(self, ui):
         self.ui = ui
@@ -126,88 +121,65 @@ class ReportsPageController:
 
     # ---------------- MMR ----------------
     def report_mmr(self):
-        total_mmr = 0
-        new_revenue = 0
         today = date.today()
-        current_month = today.month
-        current_year = today.year
+        # SQL запрос сразу считает общий MMR и доход от новых активаций за текущий месяц
+        sql = """
+            SELECT 
+                SUM(sp.price) as total_mmr,
+                SUM(CASE 
+                    WHEN MONTH(s.start_date) = %s AND YEAR(s.start_date) = %s 
+                    THEN sp.price ELSE 0 
+                END) as new_revenue
+            FROM subscriptions s
+            JOIN subscription_prices sp ON s.subscription_price_id = sp.subscription_price_id
+            JOIN clients c ON c.subscription_id = s.subscription_id
+        """
+        result = db.execute_query(sql, (today.month, today.year))
+        total_mmr, new_revenue = result[0] if result else (0, 0)
 
-        # Получаем всех клиентов
-        clients = client_get_all()
-        for client in clients:
-            sub_id = client.get("subscription_id")
-            if not sub_id:
-                continue
-            sub = subscription_get_by_id(sub_id)
-            if not sub:
-                continue
-
-            price = subscription_price_get_by_id(sub["subscription_price_id"])
-            if not price:
-                continue
-
-            # Приводим цену к числу
-            price_value = int(price["price"])
-
-            # Считаем MMR (всех активных)
-            total_mmr += price_value
-
-            # Проверка, новый доход — если активация в этом месяце
-            start_date = sub["start_date"]
-            if isinstance(start_date, str):
-                from datetime import datetime
-                start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
-
-            if start_date.month == current_month and start_date.year == current_year:
-                new_revenue += price_value
-
-        # Заполняем таблицу отчета
-        self.ui.ReportTable.setRowCount(3)
+        self.clear_table()
+        self.ui.ReportTable.setRowCount(2)
         self.ui.ReportTable.setColumnCount(2)
-        self.ui.ReportTable.setItem(0, 0, QTableWidgetItem("Текущий MMR"))
-        self.ui.ReportTable.setItem(0, 1, QTableWidgetItem(str(total_mmr)))
-        self.ui.ReportTable.setItem(1, 0, QTableWidgetItem("Новый MMR за месяц"))
-        self.ui.ReportTable.setItem(1, 1, QTableWidgetItem(str(new_revenue)))
-        self.ui.ReportTable.setItem(2, 0, QTableWidgetItem("Изменение по сравнению с прошлым месяцем"))
-        self.ui.ReportTable.setItem(2, 1, QTableWidgetItem("0"))
+        self.ui.ReportTable.setHorizontalHeaderLabels(["Показатель", "Сумма (₽)"])
+        self.ui.ReportTable.setItem(0, 0, QTableWidgetItem("Текущий прогнозируемый MMR"))
+        self.ui.ReportTable.setItem(0, 1, QTableWidgetItem(f"{total_mmr or 0}"))
+        self.ui.ReportTable.setItem(1, 0, QTableWidgetItem("Новые продажи за месяц"))
+        self.ui.ReportTable.setItem(1, 1, QTableWidgetItem(f"{new_revenue or 0}"))
 
     # ---------------- Clients ----------------
     def report_clients(self):
         today = date.today()
-        all_clients = client_get_all()
+        # Считаем всё одним запросом через подзапросы
+        sql = """
+            SELECT
+                (SELECT COUNT(*) FROM clients) as total,
+                (SELECT COUNT(*) FROM clients c 
+                 JOIN subscriptions s ON c.subscription_id = s.subscription_id 
+                 WHERE MONTH(s.start_date) = %s AND YEAR(s.start_date) = %s) as new_clients,
+                (SELECT COUNT(*) FROM clients c 
+                 JOIN subscriptions s ON c.subscription_id = s.subscription_id
+                 JOIN subscription_prices sp ON s.subscription_price_id = sp.subscription_price_id
+                 WHERE (s.start_date + INTERVAL (CASE sp.duration 
+                    WHEN '1 месяц' THEN 30 
+                    WHEN '3 месяца' THEN 90 
+                    WHEN 'полгода' THEN 180 
+                    WHEN 'год' THEN 365 END) DAY) < %s) as expired_total
+        """
+        res = db.execute_query(sql, (today.month, today.year, today))
+        total, new, expired = res[0] if res else (0,0,0)
 
-        start_year_clients = [c for c in all_clients if c.get("subscription_id")]
-        new_clients = []
-        churned_clients = []
-
-        for c in all_clients:
-            sub = subscription_get_by_id(c.get("subscription_id"))
-            if not sub:
-                continue
-            price = subscription_price_get_by_id(sub["subscription_price_id"])
-            if not price:
-                continue
-            start_date = sub["start_date"]
-            end_date = subscription_calculate_end(start_date, price["duration"])
-            if start_date.year == today.year and start_date.month == today.month:
-                new_clients.append(c)
-            elif end_date.year == today.year and end_date.month == today.month and end_date < today:
-                churned_clients.append(c)
-
-        retention = ((len(all_clients) - len(new_clients)) / max(len(start_year_clients), 1)) * 100
+        retention = ((total - new) / max(total, 1)) * 100
 
         self.clear_table()
         self.ui.ReportTable.setColumnCount(2)
         self.ui.ReportTable.setRowCount(4)
-        self.ui.ReportTable.setHorizontalHeaderLabels(["Показатель", "Значение"])
-        self.ui.ReportTable.setItem(0, 0, QTableWidgetItem("Общее число клиентов"))
-        self.ui.ReportTable.setItem(0, 1, QTableWidgetItem(str(len(all_clients))))
-        self.ui.ReportTable.setItem(1, 0, QTableWidgetItem("Новые клиенты за месяц"))
-        self.ui.ReportTable.setItem(1, 1, QTableWidgetItem(str(len(new_clients))))
-        self.ui.ReportTable.setItem(2, 0, QTableWidgetItem("Отток клиентов за месяц"))
-        self.ui.ReportTable.setItem(2, 1, QTableWidgetItem(str(len(churned_clients))))
-        self.ui.ReportTable.setItem(3, 0, QTableWidgetItem("Уровень удержания, %"))
-        self.ui.ReportTable.setItem(3, 1, QTableWidgetItem(f"{retention:.2f}"))
+        self.ui.ReportTable.setHorizontalHeaderLabels(["Метрика", "Значение"])
+        self.ui.ReportTable.setItem(0, 0, QTableWidgetItem("База клиентов (всего)"))
+        self.ui.ReportTable.setItem(0, 1, QTableWidgetItem(str(total)))
+        self.ui.ReportTable.setItem(1, 0, QTableWidgetItem("Прирост (новые)"))
+        self.ui.ReportTable.setItem(1, 1, QTableWidgetItem(str(new)))
+        self.ui.ReportTable.setItem(2, 0, QTableWidgetItem("Уровень удержания (Retention)"))
+        self.ui.ReportTable.setItem(2, 1, QTableWidgetItem(f"{retention:.1f}%"))
 
     # ---------------- Salary Rund ----------------
     def report_salary(self):

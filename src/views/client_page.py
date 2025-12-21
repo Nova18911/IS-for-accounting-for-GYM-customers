@@ -69,6 +69,22 @@ class ClientPageController:
         self.ui.Save_clientBtn_3.clicked.connect(self.save_client)
         self.ui.Delete_clientBtn_3.clicked.connect(self.delete_client)
         self.ui.Photo_3.mousePressEvent = self.select_photo
+
+        self.ui.Photo_3.setStyleSheet("""
+                    QLabel {
+                        border: 2px dashed #aaaaaa;
+                        border-radius: 10px;
+                        background-color: #f0f0f0;
+                        color: #666666;
+                    }
+                    QLabel:hover {
+                        border: 2px dashed #0078d7;
+                        background-color: #e5f1fb;
+                    }
+                """)
+        self.ui.Photo_3.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.ui.Photo_3.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
         self.ui.DeletePhotoClientBtn.clicked.connect(self.clear_photo)
 
         # Абонементы
@@ -82,7 +98,21 @@ class ClientPageController:
         # Тренировки
         self.ui.PersonalTrainingBtn_3.clicked.connect(self.add_personal_training)
         self.ui.GroupTrainingBtn_3.clicked.connect(self.add_group_training)
+        self.ui.PersonalTrainingTabWidget_3.itemDoubleClicked.connect(self.edit_personal_training)
         self.ui.GroupTrainingTabWidget_3.itemDoubleClicked.connect(self.edit_group_training_attendance)
+
+        pt_table = self.ui.PersonalTrainingTabWidget_3
+        pt_table.setColumnCount(4)
+        pt_table.setHorizontalHeaderLabels(["ID", "Дата", "Время", "Тренер"])
+        pt_table.horizontalHeader().setStretchLastSection(True)
+        pt_table.setColumnHidden(0, True)  # Скрываем ID
+
+        # Настройка таблицы ГРУППОВЫХ тренировок
+        gt_table = self.ui.GroupTrainingTabWidget_3
+        gt_table.setColumnCount(6)
+        gt_table.setHorizontalHeaderLabels(["ID", "Дата", "Время", "Услуга", "Зал", "Тренер"])
+        gt_table.horizontalHeader().setStretchLastSection(True)
+        gt_table.setColumnHidden(0, True)  # Скрываем ID
 
 
     # ---------------- subscription UI ----------------
@@ -248,6 +278,7 @@ class ClientPageController:
         self.ui.Photo_3.setText("Фото")
         self.current_photo_data = None
 
+
     # ---------------- subscription ----------------
     def load_subscription(self):
         today = date.today()
@@ -255,6 +286,7 @@ class ClientPageController:
         if not self.current_subscription_id:
             # Если абонемента нет, показываем сегодняшнюю дату
             self.ui.Day_subEdit_3.setText(str(today.day))
+            self.ui.Month_subEdit_3.setText(str(today.month))
             self.ui.Month_subEdit_3.setText(str(today.month))
             self.ui.Year_subEdit_3.setText(str(today.year))
             self.ui.LongTimeComboBox_3.setCurrentIndex(-1)
@@ -425,29 +457,32 @@ class ClientPageController:
             return
 
         trainings = personal_training_get_by_client(self.current_client_id)
-        table.setRowCount(len(trainings))
-        table.setColumnHidden(0, False)  # столбец с ID (будет скрыт)
 
         for row, pt in enumerate(trainings):
-            # Скрытый столбец с ID тренировки
+            table.insertRow(row)
+
+            # ID (скрытый)
             id_item = QTableWidgetItem(str(pt['personal_training_id']))
             id_item.setData(Qt.ItemDataRole.UserRole, pt['personal_training_id'])
             table.setItem(row, 0, id_item)
 
-            # Дата тренировки
+            # Дата и Время
             table.setItem(row, 1, QTableWidgetItem(pt['training_date'].strftime("%d-%m-%Y")))
-            # Время тренировки
             table.setItem(row, 2, QTableWidgetItem(str(pt['start_time'])[:5]))
-            # Тренер
-            trainer = trainer_get_by_id(pt['trainer_id'])
-            table.setItem(row, 3, QTableWidgetItem(
-                f"{trainer['last_name']} {trainer['first_name']}" if trainer else ""
-            ))
 
-        # Скрываем столбец с ID
-        table.setColumnHidden(0, True)
+            # ФИО Тренера
+            trainer = trainer_get_by_id(pt['trainer_id'])
+            if trainer:
+                trainer_name = f"{trainer['last_name']} {trainer['first_name'][0]}."
+                if trainer.get('middle_name'):
+                    trainer_name += f" {trainer['middle_name'][0]}."
+            else:
+                trainer_name = "Не указан"
+
+            table.setItem(row, 3, QTableWidgetItem(trainer_name))
+
         table.setEditTriggers(table.EditTrigger.NoEditTriggers)
-        table.itemDoubleClicked.connect(self.edit_personal_training)
+
 
     def add_personal_training(self):
         if not self.current_client_id:
@@ -499,16 +534,17 @@ class ClientPageController:
         if not self.current_client_id:
             return
 
-        trainings = group_attendance_get_by_client(self.current_client_id)
-        table.setRowCount(len(trainings))
+        attendances = group_attendance_get_by_client(self.current_client_id)
 
-        for row, ga in enumerate(trainings):
-            # Сохраняем ID как текст и как данные пользователя для надежности
+        for row, ga in enumerate(attendances):
+            table.insertRow(row)
+
+            # ID посещения
             id_item = QTableWidgetItem(str(ga['attendance_id']))
             id_item.setData(Qt.ItemDataRole.UserRole, ga['attendance_id'])
             table.setItem(row, 0, id_item)
 
-            # Получаем тренировку
+            # Получаем объект тренировки через модель
             tr = GroupTraining.get_by_id(ga['group_training_id'])
 
             if tr:
@@ -516,13 +552,13 @@ class ClientPageController:
                 table.setItem(row, 2, QTableWidgetItem(str(tr.start_time)[:5]))
                 table.setItem(row, 3, QTableWidgetItem(tr.service_name or ""))
                 table.setItem(row, 4, QTableWidgetItem(tr.hall_name or ""))
-                table.setItem(row, 5, QTableWidgetItem(tr.trainer_name or ""))
+                # Используем trainer_name из объекта тренировки
+                table.setItem(row, 5, QTableWidgetItem(tr.trainer_name or "Не указан"))
 
-        table.setColumnHidden(0, True)
         table.setEditTriggers(table.EditTrigger.NoEditTriggers)
 
-    # ---------------- group trainings ----------------
     def add_group_training(self):
+        # 1. Проверки данных
         if not self.current_client_id:
             QMessageBox.warning(None, "Ошибка", "Сначала выберите клиента")
             return
@@ -535,30 +571,54 @@ class ClientPageController:
             )
             return
 
-        client_data = client_get_by_id(self.current_client_id)
-        dialog = AddGroupTrainingDialog(client_data)
-        dialog.exec()
-        self.load_group_trainings()
+        # 2. Защита от дублирования через блокировку кнопки и проверку состояния
+        if not self.ui.GroupTrainingBtn_3.isEnabled():
+            return
+
+        self.ui.GroupTrainingBtn_3.setEnabled(False)
+
+        try:
+            client_data = client_get_by_id(self.current_client_id)
+            dialog = AddGroupTrainingDialog(client_data)
+            dialog.exec()
+            # Обновляем список в любом случае после закрытия
+            self.load_group_trainings()
+        finally:
+            # Разблокируем кнопку
+            self.ui.GroupTrainingBtn_3.setEnabled(True)
 
     def edit_group_training_attendance(self, item):
-        row = item.row()
-        table = self.ui.GroupTrainingTabWidget_3
-
-        # Получаем attendance_id из первого (скрытого) столбца
-        attendance_id_item = table.item(row, 0)
-        if not attendance_id_item:
-            return
-        attendance_id = int(attendance_id_item.text())
-
-        client_data = client_get_by_id(self.current_client_id)
-        if not client_data:
+        # 1. Защита от двойного открытия диалога (флаг-блокировка)
+        if hasattr(self, '_editing_group') and self._editing_group:
             return
 
-        dialog = AddGroupTrainingDialog(client_data)
-        dialog.load_existing_attendance(attendance_id)  # Метод, который мы создали выше
+        self._editing_group = True
 
-        if dialog.exec():
-            self.load_group_trainings()  # Обновляем таблицу после закрытия
+        try:
+            row = item.row()
+            table = self.ui.GroupTrainingTabWidget_3
+
+            # Получаем attendance_id из первого (скрытого) столбца
+            attendance_id_item = table.item(row, 0)
+            if not attendance_id_item:
+                return
+
+            attendance_id = int(attendance_id_item.text())
+
+            client_data = client_get_by_id(self.current_client_id)
+            if not client_data:
+                return
+
+            # 2. Создание и запуск диалога
+            dialog = AddGroupTrainingDialog(client_data)
+            dialog.load_existing_attendance(attendance_id)
+
+            if dialog.exec():
+                self.load_group_trainings()
+
+        finally:
+            # Снимаем блокировку, чтобы можно было редактировать снова
+            self._editing_group = False
 
     def clear_client_form(self):
         self.current_client_id = None
